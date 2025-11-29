@@ -10,6 +10,9 @@ players.list = {}
 local player_quads, player_image
 local shield_image
 
+-- Weapon icon spritesheet (for UI)
+local weapon_icon_quads, weapon_icon_image
+
 -- Player object metatable
 local Player = {}
 Player.__index = Player
@@ -31,8 +34,11 @@ function players.new(x, y)
     player.input_x = 0  -- [-1, 1]
     player.input_y = 0  -- [-1, 1]
     player.weapon = "standard"  -- Current weapon
+    player.weapon_stack = {}  -- Stack of fallback weapons
     player.firing = false  -- Is fire button pressed
     player.firing_p = 0  -- Weapon-specific state (e.g., cooldown)
+    player.respawn_timer = 0  -- Timer for respawning
+    player.true_death = false  -- If true, player won't respawn
 
     table.insert(players.list, player)
 
@@ -51,10 +57,29 @@ function Player:equip_weapon(weapon_name)
     end
 end
 
+-- Collect a weapon powerup (pushes current weapon onto stack)
+function Player:collect_weapon(weapon_name)
+    -- Push current weapon onto stack
+    table.insert(self.weapon_stack, self.weapon)
+    -- Equip new weapon
+    self:equip_weapon(weapon_name)
+end
+
+-- Pop a weapon from the stack
+function Player:pop_weapon()
+    if #self.weapon_stack > 0 then
+        local weapon_name = table.remove(self.weapon_stack)
+        self:equip_weapon(weapon_name)
+        return true
+    end
+    return false
+end
+
 -- Initialize players module (load spritesheet)
 function players.load()
     player_quads, player_image = spritesheet.load("assets/player-16-16.png")
     shield_image = love.graphics.newImage("assets/shield_Edit.png")
+    weapon_icon_quads, weapon_icon_image = spritesheet.load("assets/contra-weapons-24-16.png")
 end
 
 -- Damage a player
@@ -73,6 +98,29 @@ function Player:damage()
         -- Die
         self.alive = false
         self.explodeTime = 0
+        self.respawn_timer = 2  -- Respawn after 2 seconds
+    end
+end
+
+-- Respawn the player
+function Player:respawn()
+    -- Pop a weapon from stack
+    if self:pop_weapon() then
+        -- Respawn with weapon from stack
+        self.alive = true
+        self.explodeTime = 0
+        self.hasShield = true
+        self.shieldRestore = 0
+        self.shieldAnim = 1  -- Start shield animation (will animate toward 0)
+        self.iTime = 1  -- 1 second of invincibility
+        self.vx = 0
+        self.vy = 0
+        -- Reset to starting position
+        self.x = 50
+        self.y = 50
+    else
+        -- No weapons left - true death
+        self.true_death = true
     end
 end
 
@@ -131,9 +179,18 @@ function Player:update(dt)
         end
     end
 
-    -- If not alive, update explode time and don't update position
+    -- If not alive, update explode time and handle respawn
     if not self.alive then
         self.explodeTime = self.explodeTime + dt
+
+        if not self.true_death then
+            -- Update respawn timer
+            self.respawn_timer = self.respawn_timer - dt
+            if self.respawn_timer <= 0 then
+                self:respawn()
+            end
+        end
+
         return
     end
 
@@ -289,6 +346,54 @@ end
 function players.draw()
     for _, player in ipairs(players.list) do
         player:render()
+    end
+end
+
+-- Draw weapon stack UI
+function players.draw_ui()
+    if not weapon_icon_quads or not weapon_icon_image then
+        return
+    end
+
+    -- Position to the right of the game area
+    local x_base = (MARGIN_L + GAME_WIDTH) / PIXEL_SCALE + 5
+    local y_margin = MARGIN_T / PIXEL_SCALE + 5
+
+    for _, player in ipairs(players.list) do
+        -- Draw current weapon at top (position 0)
+        local current_sprite_index = WeaponSprites[player.weapon] or 1
+        local x = x_base
+        local y = y_margin
+
+        -- Highlight current weapon with blue rectangle
+        love.graphics.setColor(0.5, 0.5, 1, 0.5)
+        love.graphics.rectangle("fill", x - 2, y - 2, 28, 20)
+        love.graphics.setColor(1, 1, 1)
+
+        -- Draw current weapon icon
+        love.graphics.draw(weapon_icon_image, weapon_icon_quads[current_sprite_index], x, y)
+
+        -- Draw up to 4 weapons from the stack below current weapon
+        local stack_size = #player.weapon_stack
+        local weapons_to_show = math.min(stack_size, 4)
+
+        for i = 1, weapons_to_show do
+            local weapon_name = player.weapon_stack[stack_size - i + 1]  -- Show from top of stack
+            local sprite_index = WeaponSprites[weapon_name] or 1
+
+            local stack_x = x_base
+            local stack_y = y_margin + i * 20
+
+            love.graphics.draw(weapon_icon_image, weapon_icon_quads[sprite_index], stack_x, stack_y)
+        end
+
+        -- If more than 4 weapons in stack, show "+n"
+        if stack_size > 4 then
+            local extra_count = stack_size - 4
+            local text_x = x_base
+            local text_y = y_margin + 5 * 20
+            love.graphics.print("+" .. extra_count, text_x, text_y)
+        end
     end
 end
 

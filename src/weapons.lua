@@ -74,4 +74,10 @@ WeaponTypes = {
     bishot = weapon_bishot
 }
 
+-- Weapon sprite indices for powerups (from contra-weapons-24-16.png)
+WeaponSprites = {
+    standard = 1,
+    bishot = 2
+}
+
 return weapons

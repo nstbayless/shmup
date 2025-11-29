@@ -12,6 +12,7 @@ local players = require "src/players"
 local enemies = require "src/enemies"
 local bullets = require "src/bullets"
 local particles = require "src/particles"
+local powerups = require "src/powerups"
 
 local frame_accumulate = 0.5
 local canvas
@@ -41,6 +42,9 @@ function love.load(args)
 
     -- Initialize particles
     particles.load()
+
+    -- Initialize powerups
+    powerups.load()
 end
 
 function love.draw()
@@ -59,6 +63,10 @@ function love.draw()
     -- Draw dark green background everywhere
     love.graphics.setColor(0, 0.2, 0)
     love.graphics.rectangle("fill", 0, 0, canvas_width, canvas_height)
+    love.graphics.setColor(1, 1, 1)
+
+    -- Draw weapon stack UI (before scissor is enabled)
+    players.draw_ui()
 
     -- Set scissor rectangle for game area and draw black background
     love.graphics.setScissor(margin_l, margin_t, game_w, game_h)
@@ -78,6 +86,9 @@ function love.draw()
 
     -- Draw all particles
     particles.render()
+
+    -- Draw all powerups
+    powerups.render()
 
     -- Draw all players
     players.draw()
@@ -121,11 +132,21 @@ function love.draw()
 end
 
 function love.update(dt)
+    -- Check for true death reset
+    if players.list[1] and players.list[1].true_death and players.list[1].explodeTime >= 2 then
+        if players.list[1].firing then
+            -- Reset game
+            love.load()
+            return
+        end
+    end
+
     players.input()
     players.update(dt)
     enemies.update(dt)
     bullets.update(dt)
     particles.update(dt)
+    powerups.update(dt)
 
     -- Collision detection: enemy bullets vs players
     for _, bullet in ipairs(bullets.list) do
@@ -185,9 +206,29 @@ function love.update(dt)
         end
     end
 
+    -- Collision detection: powerups vs players
+    for _, powerup in ipairs(powerups.list) do
+        if powerup.alive then
+            for _, player in ipairs(players.list) do
+                if player.alive then
+                    local dx = player.x - powerup.x
+                    local dy = player.y - powerup.y
+                    local distance = math.sqrt(dx * dx + dy * dy)
+                    -- Powerup collection radius (roughly 10 pixels)
+                    if distance < 10 then
+                        player:collect_weapon(powerup.weapon_type)
+                        powerup.alive = false
+                        break
+                    end
+                end
+            end
+        end
+    end
+
     enemies.garbage()
     bullets.garbage()
     particles.garbage()
+    powerups.garbage()
 end
 
 function love.keypressed(key)
@@ -223,6 +264,15 @@ function love.keypressed(key)
             -- Cycle to next weapon
             local next_index = (current_index % #WEAPONS) + 1
             player:equip_weapon(WEAPONS[next_index])
+        end
+    end
+
+    -- Press 'q' to get a random weapon (debugging)
+    if key == 'q' then
+        if players.list[1] then
+            local player = players.list[1]
+            local random_weapon = WEAPONS[math.random(1, #WEAPONS)]
+            player:collect_weapon(random_weapon)
         end
     end
 end
