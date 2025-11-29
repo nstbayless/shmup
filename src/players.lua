@@ -1,4 +1,5 @@
 local spritesheet = require "src/spritesheet"
+local weapons = require "src/weapons"
 
 local players = {}
 
@@ -20,6 +21,7 @@ function players.new(x, y)
     player.y = y or 0
     player.vx = 0
     player.vy = 0
+    player.r = 5  -- Collision radius
     player.hasShield = true
     player.iTime = 0
     player.shieldRestore = 0
@@ -28,9 +30,25 @@ function players.new(x, y)
     player.shieldAnim = 0  -- 0 = shield present, 1 = shield absent
     player.input_x = 0  -- [-1, 1]
     player.input_y = 0  -- [-1, 1]
+    player.weapon = "standard"  -- Current weapon
+    player.firing = false  -- Is fire button pressed
+    player.firing_p = 0  -- Weapon-specific state (e.g., cooldown)
 
     table.insert(players.list, player)
+
+    -- Initialize weapon
+    player:equip_weapon("standard")
+
     return player
+end
+
+-- Equip a weapon
+function Player:equip_weapon(weapon_name)
+    self.weapon = weapon_name
+    local weapon = WeaponTypes[weapon_name]
+    if weapon and weapon.init then
+        weapon:init(self)
+    end
 end
 
 -- Initialize players module (load spritesheet)
@@ -86,6 +104,9 @@ function Player:input(input_src)
         if love.keyboard.isDown('down') then
             self.input_y = self.input_y + 1
         end
+
+        -- Check fire button
+        self.firing = love.keyboard.isDown('space')
     end
     -- TODO: Handle gamepad input
 end
@@ -114,6 +135,12 @@ function Player:update(dt)
     if not self.alive then
         self.explodeTime = self.explodeTime + dt
         return
+    end
+
+    -- Update weapon
+    local weapon = WeaponTypes[self.weapon]
+    if weapon and weapon.update then
+        weapon:update(self, dt)
     end
 
     -- Move velocity toward target velocity using acceleration
