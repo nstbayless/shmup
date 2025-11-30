@@ -83,23 +83,17 @@ function love.draw()
     -- Draw weapon stack UI (before scissor is enabled)
     players.draw_ui()
 
-    -- Draw wave timer at top right
-    if waves.currentWave then
-        local remainingTime = waves.currentWave.maxTime - waves.currentWave.currentTime
-        remainingTime = math.max(0, remainingTime)  -- Don't show negative
-        local timeText = string.format("%.2f", remainingTime)
+    -- Draw kill counter at top right
+    local killText = "Kills: " .. enemies.killCount
+    local font = love.graphics.getFont()
+    local textWidth = font:getWidth(killText)
 
-        -- Get current font to measure text width
-        local font = love.graphics.getFont()
-        local textWidth = font:getWidth(timeText)
+    -- Position at top right with small margin
+    local x = canvas_width - textWidth - 5
+    local y = 5
 
-        -- Position at top right with small margin
-        local x = canvas_width - textWidth - 5
-        local y = 5
-
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.print(timeText, x, y)
-    end
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print(killText, x, y)
 
     -- Set scissor rectangle for game area and draw black background
     love.graphics.setScissor(margin_l, margin_t, game_w, game_h)
@@ -237,7 +231,7 @@ function love.update(dt)
                     local distance = math.sqrt(dx * dx + dy * dy)
                     if distance < enemy.r + bullet.r then
                         -- Reduce enemy HP
-                        enemy.hp = enemy.hp - 1
+                        enemy.hp = enemy.hp - bullet.damage
                         enemy.damageFlashTimer = 0.06  -- Flash white for 0.1 seconds
                         bullet.alive = false
 
@@ -251,6 +245,8 @@ function love.update(dt)
                             particles.new(enemy.x, enemy.y, "explosion")
                             -- Play explosion sound
                             enemies.playExplosionSound()
+                            -- Increment kill counter
+                            enemies.killCount = enemies.killCount + 1
                         end
                         break
                     end
@@ -276,6 +272,8 @@ function love.update(dt)
                         particles.new(enemy.x, enemy.y, "explosion")
                         -- Play explosion sound
                         enemies.playExplosionSound()
+                        -- Increment kill counter
+                        enemies.killCount = enemies.killCount + 1
                         break
                     end
                 end
@@ -295,6 +293,10 @@ function love.update(dt)
                     if distance < 10 then
                         player:collect_weapon(powerup.weapon_type)
                         powerup.alive = false
+
+                        -- Restore shield when picking up powerup
+                        player.hasShield = true
+                        player.shieldRestore = 0
 
                         -- Create text particle showing weapon name
                         local weapon = WeaponTypes[powerup.weapon_type]

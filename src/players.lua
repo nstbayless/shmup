@@ -12,6 +12,7 @@ local weapon_icon_quads, weapon_icon_image
 local sfx_shield_restore
 local sfx_hit
 local sfx_death
+local sfx_player_shoot
 
 -- Player object metatable
 local Player = {}
@@ -90,6 +91,15 @@ function players.load()
     sfx_shield_restore = love.audio.newSource("assets/sfx/Player/shoot.wav", "static")
     sfx_hit = love.audio.newSource("assets/sfx/Player/parry.wav", "static")
     sfx_death = love.audio.newSource("assets/sfx/Player/bullet_hit.wav", "static")
+    sfx_player_shoot = love.audio.newSource("assets/sfx/Player/player_shoot.wav", "static")
+end
+
+-- Play player shoot sound
+function players.playShootSound()
+    if sfx_player_shoot then
+        sfx_player_shoot:stop()
+        sfx_player_shoot:play()
+    end
 end
 
 -- Damage a player
@@ -134,7 +144,7 @@ function Player:respawn()
         self.hasShield = true
         self.shieldRestore = 0
         self.shieldAnim = 1  -- Start shield animation (will animate toward 0)
-        self.iTime = 1  -- 1 second of invincibility
+        self.iTime = 3  -- 3 seconds of invincibility
         self.vx = 0
         self.vy = 0
         -- Reset to starting position (halfway along width, 90% along height)
@@ -142,6 +152,14 @@ function Player:respawn()
         local game_height = GAME_HEIGHT / PIXEL_SCALE
         self.x = game_width / 2
         self.y = game_height * 0.9
+
+        -- Create respawn text particle showing weapon name
+        local particles = require "src/particles"
+        local weapon = WeaponTypes[self.weapon]
+        if weapon and weapon.name then
+            local weapon_name = string.upper(weapon.name)
+            particles.new(self.x, self.y - 24, "respawn_text", weapon_name)
+        end
     else
         -- No weapons left - true death
         self.true_death = true

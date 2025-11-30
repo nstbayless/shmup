@@ -11,6 +11,9 @@ enemies.list = {}
 -- Current wave number (for HP calculations)
 enemies.currentWave = 0
 
+-- Kill counter
+enemies.killCount = 0
+
 -- Enemy spritesheet
 local enemy_quads, enemy_image
 local flash_shader
@@ -23,6 +26,7 @@ local sfx_shoot
 -- Initialize enemies module state
 function enemies.init()
     enemies.list = {}
+    enemies.killCount = 0
 end
 
 -- Load enemy assets
@@ -55,8 +59,8 @@ function enemies.new(x, y, type, config)
 
     -- Type-specific initialization
     if type == "positioner" then
-        -- Positioner HP: 4-6 random
-        enemy.hp = math.random(4, 6)
+        -- Positioner HP
+        enemy.hp = math.random(2, 4)
         enemy.maxHp = enemy.hp
         -- Set destination coordinates
         enemy.dstX = math.random() * game_width
@@ -88,19 +92,22 @@ function enemies.new(x, y, type, config)
         enemy.directShotIndex = nil
         enemy.exitVelocity = 0
         enemy.exitDirection = 0
+        enemy.wavePositionerCount = config and config.wavePositionerCount or 0
     elseif type == "snakeHead" then
-        -- Snake head HP: 10-15 random + current wave number
-        enemy.hp = math.random(10, 15) + enemies.currentWave
+        -- Snake head HP: 10-15 random + half current wave number, capped at 14
+        enemy.hp = math.min(14, math.random(10, 15) + enemies.currentWave * 0.5)
         enemy.maxHp = enemy.hp
 
         -- Snake head specific initialization
         enemy.currentDir = config and config.initialDir or 180  -- Direction in degrees
         enemy.targetDir = enemy.currentDir
         enemy.speed = 40  -- pixels per second
+        enemy.acceleration = 0  -- acceleration when decapitated
         enemy.aliveTime = 0  -- Track how long snake has been alive
         enemy.animTime = 0
         enemy.tail = nil  -- Reference to the last body piece
         enemy.bodyCount = 0  -- Count of living body pieces
+        enemy.prev = nil  -- Will point to first body piece behind head
     elseif type == "snakeBody" then
         -- Snake body HP: 8 + current wave number
         enemy.hp = 8 + enemies.currentWave
@@ -111,6 +118,7 @@ function enemies.new(x, y, type, config)
         enemy.head = config and config.head or nil  -- Reference to the head
         enemy.deathTimer = 0  -- Timer before exploding when leader dies
         enemy.animTime = 0
+        enemy.prev = nil  -- Will point to piece behind this one
     end
 
     table.insert(enemies.list, enemy)
@@ -143,6 +151,10 @@ function enemies.spawnSnake()
         local bodyY = y - 16 * i
 
         local body = enemies.new(bodyX, bodyY, "snakeBody", {following = previous, head = head})
+
+        -- Set up doubly-linked list: previous.prev points to this body piece
+        previous.prev = body
+
         previous = body
         tail = body
         head.bodyCount = head.bodyCount + 1
@@ -267,7 +279,7 @@ function enemy_update_positioner(e, dt)
             e.x = e.dstX
             e.y = e.dstY
             e.state = "firing"
-            e.burstCooldown = math.random() + 3  -- 3-4 seconds until first burst
+            e.burstCooldown = math.random()*3 + 2
             e.burstsCompleted = 0
         else
             -- Calculate speed based on distance ratio
@@ -293,8 +305,11 @@ function enemy_update_positioner(e, dt)
             end
         end
 
+        -- Determine burst size based on number of positioners in wave
+        local burst_size = (e.wavePositionerCount > 8) and 3 or 4
+
         -- Fire shots in burst
-        if e.burstCooldown <= 0 and e.burstTimer <= 0 and e.shotsInBurst < 4 then
+        if e.burstCooldown <= 0 and e.burstTimer <= 0 and e.shotsInBurst < burst_size then
             -- Fire a shot
             if players.list[1] and players.list[1].alive then
                 local player = players.list[1]
@@ -302,7 +317,7 @@ function enemy_update_positioner(e, dt)
 
                 -- One random shot in the burst is aimed directly at player
                 if e.directShotIndex == nil then
-                    e.directShotIndex = math.random(1, 4)
+                    e.directShotIndex = math.random(1, burst_size)
                 end
 
                 if e.shotsInBurst + 1 == e.directShotIndex then
@@ -323,8 +338,7 @@ function enemy_update_positioner(e, dt)
                 local distance = math.sqrt(dx * dx + dy * dy)
 
                 if distance > 0 then
-                    -- Positioner bullets travel at 70% of normal speed
-                    local bulletSpeed = BULLET_SPEED * 0.7
+                    local bulletSpeed = BULLET_SPEED * 0.35
                     local vx = (dx / distance) * bulletSpeed
                     local vy = (dy / distance) * bulletSpeed
                     bullets.new(e.x, e.y, vx, vy, "standard")
@@ -338,7 +352,7 @@ function enemy_update_positioner(e, dt)
             e.burstTimer = 0.1  -- 0.1 seconds between shots
 
             -- Check if burst is complete
-            if e.shotsInBurst >= 4 then
+            if e.shotsInBurst >= burst_size then
                 e.burstsCompleted = e.burstsCompleted + 1
                 e.directShotIndex = nil  -- Reset for next burst
 
@@ -396,6 +410,20 @@ function enemy_render_positioner(e)
     love.graphics.draw(enemy_image, enemy_quads[2], e.x - offset_x, e.y - offset_y)
 end
 
+-- Count living body pieces in snake chain using doubly-linked list
+local function count_snake_body_pieces(head)
+    local count = 0
+    local current = head.prev  -- Start from first body piece behind head
+
+    -- Walk down the chain until we reach the end or a dead piece
+    while current and current.alive do
+        count = count + 1
+        current = current.prev  -- Move to next piece in chain
+    end
+
+    return count
+end
+
 -- Snake head update function
 function enemy_update_snakeHead(e, dt)
     local game_width = GAME_WIDTH / PIXEL_SCALE
@@ -407,9 +435,20 @@ function enemy_update_snakeHead(e, dt)
     -- Update animation time
     e.animTime = e.animTime + dt
 
+    -- Count body pieces
+    local body_count = count_snake_body_pieces(e)
+
+    -- If decapitated (3 or fewer body pieces), accelerate
+    if body_count <= 3 then
+        e.acceleration = 30  -- 30 pixels per second per second
+        e.speed = e.speed + e.acceleration * dt
+    else
+        e.acceleration = 0
+    end
+
     -- Pick new target direction only when we've reached the current target
-    -- If we have fewer than 2 body pieces, don't change direction (keep going straight)
-    if e.bodyCount >= 2 and e.currentDir == e.targetDir then
+    -- If we have 3 or fewer body pieces, don't change direction (keep going straight)
+    if body_count > 3 and e.currentDir == e.targetDir then
         if e.y > game_height * 0.95 then
             -- Below 95% line: always point straight down
             e.targetDir = 180
@@ -431,12 +470,18 @@ function enemy_update_snakeHead(e, dt)
         -- Above screen: point straight down
         e.targetDir = 180
     elseif e.x < 0 or e.x > game_width then
-        -- Left or right of screen: point toward center
-        local centerX = game_width / 2
-        local centerY = game_height / 2
-        local dx = centerX - e.x
-        local dy = centerY - e.y
-        e.targetDir = math.deg(math.atan2(dx, dy))
+        -- Left or right of screen
+        if e.y > game_height / 2 then
+            -- Below halfway: go directly upward
+            e.targetDir = 0
+        else
+            -- Above halfway: point toward center
+            local centerX = game_width / 2
+            local centerY = game_height / 2
+            local dx = centerX - e.x
+            local dy = centerY - e.y
+            e.targetDir = math.deg(math.atan2(dx, dy))
+        end
     end
 
     -- Adjust current direction toward target direction using modular_toward
@@ -452,6 +497,12 @@ function enemy_update_snakeHead(e, dt)
         -- Check if tail is also below screen (or doesn't exist/isn't alive)
         if not e.tail or not e.tail.alive or e.tail.y > game_height then
             e.alive = false
+            -- Despawn all body components immediately
+            for _, enemy in ipairs(enemies.list) do
+                if enemy.type == "snakeBody" and enemy.head == e and enemy.alive then
+                    enemy.alive = false
+                end
+            end
         end
     end
 end
@@ -507,6 +558,8 @@ function enemy_update_snakeBody(e, dt)
             particles.new(e.x, e.y, "explosion")
             -- Play explosion sound
             enemies.playExplosionSound()
+            -- Increment kill counter
+            enemies.killCount = enemies.killCount + 1
             -- Decrement head's body count
             if e.head and e.head.alive then
                 e.head.bodyCount = e.head.bodyCount - 1

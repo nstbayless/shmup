@@ -123,6 +123,45 @@ function particle_render_text(p)
     end
 end
 
+-- Respawn text particle update (moves upward for 1 second then disappears)
+function particle_update_respawn_text(p, dt)
+    p.animTime = p.animTime + dt
+
+    -- Move upward
+    p.y = p.y - dt * 20  -- Move up 20 pixels per second
+
+    -- Remove particle after 1 second
+    if p.animTime >= 1 then
+        p.alive = false
+    end
+end
+
+-- Respawn text particle render (shows "Revert to" above weapon name, light red, flickers)
+function particle_render_respawn_text(p)
+    -- Calculate flicker state (32 Hz)
+    local flicker_period = 1 / 32
+    local flicker_on = (math.floor(p.animTime / flicker_period) % 2) == 0
+
+    if flicker_on then
+        -- Light red color
+        love.graphics.setColor(1, 0.5, 0.5)
+
+        local font = love.graphics.getFont()
+
+        -- Draw "Revert to" text (smaller, above)
+        local revert_text = "Revert to"
+        local revert_width = font:getWidth(revert_text)
+        love.graphics.print(revert_text, p.x - revert_width / 2, p.y - 10)
+
+        -- Draw weapon name (larger font size, below)
+        local weapon_width = font:getWidth(p.text)
+        love.graphics.print(p.text, p.x - weapon_width / 2, p.y)
+
+        -- Reset color
+        love.graphics.setColor(1, 1, 1)
+    end
+end
+
 -- Global particle type definitions
 ParticleTypes = {
     explosion = {
@@ -132,6 +171,10 @@ ParticleTypes = {
     text = {
         update = particle_update_text,
         render = particle_render_text
+    },
+    respawn_text = {
+        update = particle_update_respawn_text,
+        render = particle_render_respawn_text
     }
 }
 

@@ -53,7 +53,7 @@ function waves.update(dt)
         if wave.enemySpawnTimer >= wave.enemySpawnInterval and wave.enemiesSpawned < wave.enemySpawnCount then
             -- Spawn enemy based on wave type
             if wave.type == "positioner" then
-                enemies.new(0, 0, "positioner")
+                enemies.new(0, 0, "positioner", {wavePositionerCount = wave.enemySpawnCount})
             elseif wave.type == "snake" then
                 enemies.spawnSnake()
             end
@@ -116,9 +116,12 @@ function waves.getNextWave()
         local spawnTime = 3 + math.random() * 2  -- 3-5 seconds
         local interval = spawnTime / count
 
+        -- Calculate wave time: starts at 15s, decreases by 0.5s per wave, min 8s
+        local waveTime = math.max(8, 15 - 0.5 * (nextWaveNum - 2))
+
         return {
             type = "positioner",
-            maxTime = 15,
+            maxTime = waveTime,
             enemySpawnCount = count,
             enemySpawnInterval = interval
         }
@@ -142,9 +145,12 @@ function waves.getNextWave()
             local spawnTime = 3 + math.random() * 2  -- 3-5 seconds
             local interval = spawnTime / count
 
+            -- Calculate wave time: starts at 15s, decreases by 0.5s per wave, min 8s
+            local waveTime = math.max(8, 15 - 0.5 * (nextWaveNum - 2))
+
             return {
                 type = "positioner",
-                maxTime = 15,
+                maxTime = waveTime,
                 enemySpawnCount = count,
                 enemySpawnInterval = interval
             }
