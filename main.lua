@@ -271,8 +271,8 @@ function love.update(dt)
 
                         player:damage()
 
-                        -- Special rule: snake bodies always die in meteor mode
-                        local instant_kill = player.meteor_mode and enemy.type == "snakeBody"
+                        -- Special rule: snake bodies always die on player collision
+                        local instant_kill = enemy.type == "snakeBody"
 
                         -- Enemy takes 8 HP damage from collision (or instant kill)
                         if instant_kill then
