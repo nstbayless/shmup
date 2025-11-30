@@ -169,7 +169,7 @@ end
 
 function love.update(dt)
     -- Check for true death reset
-    if players.list[1] and players.list[1].true_death and players.list[1].explodeTime >= 2 then
+    if players.list[1] and players.list[1].true_death and players.list[1].explodeTime >= 4 then
         if players.list[1].firing then
             -- Reset game
             init()
@@ -264,16 +264,66 @@ function love.update(dt)
                     local dy = player.y - enemy.y
                     local distance = math.sqrt(dx * dx + dy * dy)
                     if distance < player.r + enemy.r then
+                        -- Skip collision if player is in hitStun or enemy has collision immunity
+                        if player.hitStun > 0 or enemy.collisionImmunity > 0 then
+                            break
+                        end
+
                         player:damage()
-                        -- Enemy takes full damage and dies from collision
-                        enemy.hp = 0
-                        enemy.alive = false
-                        -- Create explosion particle
-                        particles.new(enemy.x, enemy.y, "explosion")
-                        -- Play explosion sound
-                        enemies.playExplosionSound()
-                        -- Increment kill counter
-                        enemies.killCount = enemies.killCount + 1
+
+                        -- Special rule: snake bodies always die in meteor mode
+                        local instant_kill = player.meteor_mode and enemy.type == "snakeBody"
+
+                        -- Enemy takes 8 HP damage from collision (or instant kill)
+                        if instant_kill then
+                            enemy.hp = 0
+                        else
+                            enemy.hp = enemy.hp - 8
+                        end
+                        enemy.damageFlashTimer = 0.06
+
+                        -- Play hit sound
+                        enemies.playHitSound()
+
+                        if enemy.hp <= 0 then
+                            -- Enemy dies from collision
+                            player.hitStun = 0.08
+                            enemy.alive = false
+                            -- Create explosion particle
+                            particles.new(enemy.x, enemy.y, "explosion")
+                            -- Play explosion sound
+                            enemies.playExplosionSound()
+                            -- Increment kill counter
+                            enemies.killCount = enemies.killCount + 1
+                        else
+                            -- Enemy survives: knockback player and give enemy immunity
+                            player.hitStun = 0.18
+
+                            -- Give immunity for a bit
+                            if player.meteor_mode then
+                                enemy.collisionImmunity = 0.4
+                            else
+                                enemy.collisionImmunity = 2.0
+                            end
+
+                            -- Play knockback sound
+                            players.playBackSound()
+
+                            -- Calculate current velocity magnitude
+                            local vel_magnitude = math.sqrt(player.vx * player.vx + player.vy * player.vy)
+
+                            -- Calculate knockback direction (away from enemy)
+                            local knockback_distance = math.sqrt(dx * dx + dy * dy)
+                            if knockback_distance > 0 then
+                                local dir_x = dx / knockback_distance
+                                local dir_y = dy / knockback_distance
+
+                                -- Set velocity to same magnitude but away from enemy
+                                player.vx = dir_x * vel_magnitude
+                                player.vy = dir_y * vel_magnitude
+                            end
+                        end
+
                         break
                     end
                 end
@@ -289,8 +339,8 @@ function love.update(dt)
                     local dx = player.x - powerup.x
                     local dy = player.y - powerup.y
                     local distance = math.sqrt(dx * dx + dy * dy)
-                    -- Powerup collection radius (roughly 10 pixels)
-                    if distance < 10 then
+                    -- Powerup collection using powerup.r
+                    if distance < powerup.r then
                         player:collect_weapon(powerup.weapon_type)
                         powerup.alive = false
 

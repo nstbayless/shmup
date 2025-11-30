@@ -54,7 +54,8 @@ function enemies.new(x, y, type, config)
         fireTimer = math.random() + 1,  -- Random time between 1-2 seconds (for standard enemy)
         hp = 1,  -- Hitpoints (will be set based on type)
         maxHp = 1,  -- Maximum hitpoints
-        damageFlashTimer = 0  -- Timer for white flash when damaged
+        damageFlashTimer = 0,  -- Timer for white flash when damaged
+        collisionImmunity = 0  -- Timer for immunity to player collision damage
     }
 
     -- Type-specific initialization
@@ -181,6 +182,11 @@ function enemies.update(dt)
         -- Update damage flash timer
         if enemy.damageFlashTimer > 0 then
             enemy.damageFlashTimer = enemy.damageFlashTimer - dt
+        end
+
+        -- Update collision immunity timer
+        if enemy.collisionImmunity > 0 then
+            enemy.collisionImmunity = enemy.collisionImmunity - dt
         end
 
         -- Call type-specific update

@@ -3,12 +3,12 @@ local bullets = require "src/bullets"
 local weapons = {}
 
 -- List of available weapons
-WEAPONS = {"standard", "bishot", "radiater", "flamer"}
+WEAPONS = {"standard", "bishot", "radiator", "flamer", "meteor"}
 
 -- Standard weapon implementation
 local weapon_standard = {
     name = "Standard",
-    sprite_index = 1
+    sprite_index = 3
 }
 
 function weapon_standard:init(player)
@@ -40,7 +40,7 @@ end
 -- Bishot weapon implementation
 local weapon_bishot = {
     name = "Bishot",
-    sprite_index = 2
+    sprite_index = 5
 }
 
 function weapon_bishot:init(player)
@@ -86,18 +86,18 @@ function weapon_bishot:update(player, dt)
     end
 end
 
--- Radiater weapon implementation
-local weapon_radiater = {
-    name = "Radiater",
-    sprite_index = 3
+-- Radiator weapon implementation
+local weapon_radiator = {
+    name = "Radiator",
+    sprite_index = 4
 }
 
-function weapon_radiater:init(player)
+function weapon_radiator:init(player)
     player.firing_p = 0
-    player.radiater_angle = 0  -- Current firing angle in degrees
+    player.radiator_angle = 0  -- Current firing angle in degrees
 end
 
-function weapon_radiater:update(player, dt)
+function weapon_radiator:update(player, dt)
     -- Decrease firing cooldown
     if player.firing_p > 0 then
         player.firing_p = player.firing_p - dt
@@ -109,16 +109,16 @@ function weapon_radiater:update(player, dt)
         local speed = 4
 
         -- First bullet at current angle
-        local angle1_rad = math.rad(player.radiater_angle)
+        local angle1_rad = math.rad(player.radiator_angle)
         local vx1 = math.sin(angle1_rad) * speed
         local vy1 = -math.cos(angle1_rad) * speed
-        bullets.new(player.x, player.y, vx1, vy1, "radiater", player)
+        bullets.new(player.x, player.y, vx1, vy1, "radiator", player)
 
         -- Second bullet at opposite angle (180 degrees apart)
-        local angle2_rad = math.rad(player.radiater_angle + 180)
+        local angle2_rad = math.rad(player.radiator_angle + 180)
         local vx2 = math.sin(angle2_rad) * speed
         local vy2 = -math.cos(angle2_rad) * speed
-        bullets.new(player.x, player.y, vx2, vy2, "radiater", player)
+        bullets.new(player.x, player.y, vx2, vy2, "radiator", player)
 
         -- Play shoot sound
         local players_module = package.loaded["src/players"]
@@ -127,7 +127,7 @@ function weapon_radiater:update(player, dt)
         end
 
         -- Advance angle by random 1-9 degrees clockwise
-        player.radiater_angle = (player.radiater_angle + math.random() * 8) % 360
+        player.radiator_angle = (player.radiator_angle + math.random() * 8) % 360
 
         -- 7 shots per second = 1/7 second between shots
         player.firing_p = 1 / 7
@@ -137,7 +137,7 @@ end
 -- Flamer weapon implementation
 local weapon_flamer = {
     name = "Flamer",
-    sprite_index = 4
+    sprite_index = 2
 }
 
 function weapon_flamer:init(player)
@@ -220,12 +220,99 @@ function weapon_flamer:update(player, dt)
     end
 end
 
+-- Meteor weapon implementation
+local weapon_meteor = {
+    name = "Meteor",
+    sprite_index = 1
+}
+
+function weapon_meteor:init(player)
+    player.firing_p = 0
+    player.meteor_charge_time = 0  -- Time spent charging (firing while shielded)
+end
+
+function weapon_meteor:update(player, dt)
+    -- Decrease firing cooldown
+    if player.firing_p > 0 then
+        player.firing_p = player.firing_p - dt
+    end
+
+    -- Detect button press (transition from not firing to firing)
+    if player.firing and not player.firing_previous then
+        -- Button was just pressed
+        if player.hasShield then
+            -- Activate meteor mode (handled by player)
+            player:activate_meteor_mode()
+            return
+        end
+    end
+
+    -- Update charge time when firing with shield
+    if player.firing and player.hasShield then
+        player.meteor_charge_time = player.meteor_charge_time + dt
+    elseif not player.firing then
+        -- Reset charge time when button released
+        player.meteor_charge_time = 0
+    end
+
+    -- Calculate firing rate based on charge
+    local fire_rate = 1 / 5  -- Base: 5 Hz
+    if player.hasShield then
+        -- Decrease rate over 4 seconds until it stops
+        if player.meteor_charge_time >= 4 then
+            -- Stop firing after 4 seconds
+            return
+        end
+        -- Gradually increase fire_rate (slower firing)
+        local slowdown_factor = 1 + (player.meteor_charge_time / 4) * 4  -- 1x to 5x slower
+        fire_rate = fire_rate * slowdown_factor
+    end
+
+    -- Check if player is pressing fire button
+    if player.firing and player.firing_p <= 0 then
+        -- Random angle from -50 to +50 degrees from north
+        local angle_degrees = (math.random() * 100 - 50)
+        local angle_radians = math.rad(angle_degrees)
+
+        -- Base speed
+        local speed = 4
+
+        -- Calculate velocity components
+        local vx = speed * math.sin(angle_radians)
+        local vy = -speed * math.cos(angle_radians)
+
+        -- Fire bullet
+        bullets.new(player.x, player.y, vx, vy, "player", player)
+
+        -- Play shoot sound
+        local players_module = package.loaded["src/players"]
+        if players_module and players_module.playShootSound then
+            players_module.playShootSound()
+        end
+
+        player.firing_p = fire_rate
+    end
+end
+
+-- Meteor weapon shield color function (flickers blue/red at 4 Hz when has shield)
+function weapon_meteor:isShieldRed(player)
+    -- Flicker between blue and red at 4 Hz when has shield
+    if player.hasShield then
+        local time = love.timer.getTime()
+        local flicker_period = 1 / 4
+        local flicker_on = (math.floor(time / flicker_period) % 2) == 0
+        return flicker_on  -- true = red, false = blue
+    end
+    return false
+end
+
 -- Global weapon type definitions
 WeaponTypes = {
     standard = weapon_standard,
     bishot = weapon_bishot,
-    radiater = weapon_radiater,
-    flamer = weapon_flamer
+    radiator = weapon_radiator,
+    flamer = weapon_flamer,
+    meteor = weapon_meteor
 }
 
 return weapons

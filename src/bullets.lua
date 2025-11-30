@@ -112,8 +112,8 @@ function bullet_render_player(b)
     love.graphics.draw(bullet_image, bullet_quads[1], b.x - offset_x, b.y - offset_y)
 end
 
--- Radiater bullet render function
-function bullet_render_radiater(b)
+-- Radiator bullet render function
+function bullet_render_radiator(b)
     if not bullet_quads or not bullet_image then
         return
     end
@@ -163,7 +163,7 @@ function bullet_render_flamer(b)
         return
     end
 
-    -- Get sprite dimensions to center it (using sprite 3, same as radiater)
+    -- Get sprite dimensions to center it (using sprite 3, same as radiator)
     local _, _, sprite_w, sprite_h = bullet_quads[3]:getViewport()
     local offset_x = sprite_w / 2
     local offset_y = sprite_h / 2
@@ -182,9 +182,9 @@ BulletTypes = {
         update = bullet_update_standard,
         render = bullet_render_player
     },
-    radiater = {
+    radiator = {
         update = bullet_update_standard,
-        render = bullet_render_radiater
+        render = bullet_render_radiator
     },
     flamer = {
         update = bullet_update_flamer,

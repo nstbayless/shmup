@@ -29,6 +29,7 @@ function powerups.new(x, y, weapon_type)
     local powerup = {
         x = x or 0,
         y = y or 0,
+        r = 9,  -- Collision radius
         vy = 0.5,  -- Drift down slowly
         alive = true,
         weapon_type = weapon_type or "standard"

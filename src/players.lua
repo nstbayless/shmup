@@ -6,13 +6,17 @@ local players = {}
 -- Module state
 local player_quads, player_image
 local shield_image
+local shield_red_image
 local weapon_icon_quads, weapon_icon_image
+local flash_shader
 
 -- Sound effects
 local sfx_shield_restore
 local sfx_hit
 local sfx_death
 local sfx_player_shoot
+local sfx_meteor
+local sfx_back
 
 -- Player object metatable
 local Player = {}
@@ -37,9 +41,16 @@ function players.new(x, y)
     player.weapon = "standard"  -- Current weapon
     player.weapon_stack = {}  -- Stack of fallback weapons
     player.firing = false  -- Is fire button pressed
+    player.firing_previous = false  -- Previous frame's firing state (for press detection)
     player.firing_p = 0  -- Weapon-specific state (e.g., cooldown)
     player.respawn_timer = 0  -- Timer for respawning
     player.true_death = false  -- If true, player won't respawn
+    player.meteor_mode = false  -- Is player in meteor mode
+    player.meteor_timer = 0  -- Remaining time in meteor mode
+    player.meteor_particle_timer = 0  -- Timer for spawning meteor particles
+    player.meteor_sound_timer = 0  -- Timer for playing meteor sound
+    player.shield_red_on_dissipate = false  -- Should shield be red while dissipating after meteor mode
+    player.hitStun = 0  -- Hit stun timer (freezes velocity and position)
 
     table.insert(players.list, player)
 
@@ -47,6 +58,20 @@ function players.new(x, y)
     player:equip_weapon("standard")
 
     return player
+end
+
+-- Activate meteor mode (called by meteor weapon when button pressed with shield)
+function Player:activate_meteor_mode()
+    self.meteor_mode = true
+    self.meteor_timer = 5
+    self.meteor_particle_timer = 0  -- Start spawning particles immediately
+    self.meteor_sound_timer = 0  -- Start playing sound immediately
+
+    -- Clear collision immunity from all enemies
+    local enemies = require("src/enemies")
+    for _, enemy in ipairs(enemies.list) do
+        enemy.collisionImmunity = 0
+    end
 end
 
 -- Equip a weapon
@@ -85,13 +110,17 @@ end
 function players.load()
     player_quads, player_image = spritesheet.load("assets/player-16-16.png")
     shield_image = love.graphics.newImage("assets/shield_Edit.png")
+    shield_red_image = love.graphics.newImage("assets/shield_red.png")
     weapon_icon_quads, weapon_icon_image = spritesheet.load("assets/contra-weapons-24-16.png")
+    flash_shader = love.graphics.newShader("assets/flash.glsl")
 
     -- Load sound effects
     sfx_shield_restore = love.audio.newSource("assets/sfx/Player/shoot.wav", "static")
     sfx_hit = love.audio.newSource("assets/sfx/Player/parry.wav", "static")
     sfx_death = love.audio.newSource("assets/sfx/Player/bullet_hit.wav", "static")
     sfx_player_shoot = love.audio.newSource("assets/sfx/Player/player_shoot.wav", "static")
+    sfx_meteor = love.audio.newSource("assets/sfx/Player/meteor.wav", "static")
+    sfx_back = love.audio.newSource("assets/sfx/Player/back.wav", "static")
 end
 
 -- Play player shoot sound
@@ -102,10 +131,23 @@ function players.playShootSound()
     end
 end
 
+-- Play knockback sound
+function players.playBackSound()
+    if sfx_back then
+        sfx_back:stop()
+        sfx_back:play()
+    end
+end
+
 -- Damage a player
 function Player:damage()
     -- Ignore damage during invincibility time
     if self.iTime > 0 then
+        return
+    end
+
+    -- Ignore damage during meteor mode
+    if self.meteor_mode then
         return
     end
 
@@ -233,16 +275,28 @@ function Player:update(dt)
         self.iTime = toward(self.iTime, 0, dt)
     end
 
+    -- Update hit stun
+    if self.hitStun > 0 then
+        self.hitStun = toward(self.hitStun, 0, dt)
+    end
+
     -- Update shield animation (moves toward 1 when no shield, toward 0 when shielded)
     local target_anim = self.hasShield and 0 or 1
     self.shieldAnim = toward(self.shieldAnim, target_anim, dt / SHIELD_LOSE_ANIM_TIME)
 
     -- Update shield restore
     if not self.hasShield then
-        self.shieldRestore = self.shieldRestore + dt / SHIELD_RESTORE_TIME
+        -- Shield regenerates faster when holding meteor weapon
+        local restore_speed = 1
+        if self.weapon == "meteor" then
+            restore_speed = 1.3
+        end
+
+        self.shieldRestore = self.shieldRestore + (dt / SHIELD_RESTORE_TIME) * restore_speed
         if self.shieldRestore >= 1 then
             self.shieldRestore = 0
             self.hasShield = true
+            self.shield_red_on_dissipate = false  -- Reset red dissipate flag
 
             -- Play shield restore sound
             if sfx_shield_restore then
@@ -250,6 +304,9 @@ function Player:update(dt)
                 sfx_shield_restore:play()
             end
         end
+    else
+        -- Reset red dissipate flag whenever shield is present
+        self.shield_red_on_dissipate = false
     end
 
     -- If not alive, update explode time and handle respawn
@@ -267,43 +324,96 @@ function Player:update(dt)
         return
     end
 
-    -- Update weapon
-    local weapon = WeaponTypes[self.weapon]
-    if weapon and weapon.update then
-        weapon:update(self, dt)
+    -- Update meteor mode (independent of weapon)
+    if self.meteor_mode then
+        self.meteor_timer = self.meteor_timer - dt
+
+        -- Spawn meteor circle particles at 20 Hz
+        self.meteor_particle_timer = self.meteor_particle_timer - dt
+        if self.meteor_particle_timer <= 0 then
+            local particles_module = require("src/particles")
+            particles_module.new_meteor_circle(self.x, self.y)
+            self.meteor_particle_timer = 1 / 20  -- 20 Hz = 0.05 seconds
+        end
+
+        -- Play meteor sound every 0.23 seconds
+        self.meteor_sound_timer = self.meteor_sound_timer - dt
+        if self.meteor_sound_timer <= 0 then
+            if sfx_meteor then
+                sfx_meteor:stop()
+                sfx_meteor:play()
+            end
+            self.meteor_sound_timer = 0.23
+        end
+
+        if self.meteor_timer <= 0 then
+            -- Meteor mode ends naturally
+            self.meteor_mode = false
+            self.hasShield = false
+            self.shield_red_on_dissipate = true  -- Shield dissipates as red
+            self.iTime = math.max(self.iTime, 1.0) 
+        end
     end
 
-    -- Move velocity toward target velocity using acceleration
-    local target_vx = STANDARD_SPEED * self.input_x
-    local target_vy = STANDARD_SPEED * self.input_y
-
-    self.vx = toward(self.vx, target_vx, dt * ACCEL_X)
-    self.vy = toward(self.vy, target_vy, dt * ACCEL_Y)
-
-    -- Update position
-    self.x = self.x + self.vx
-    self.y = self.y + self.vy
-
-    -- Game region dimensions (scaled by pixel scale)
-    local game_width = GAME_WIDTH / PIXEL_SCALE
-    local game_height = GAME_HEIGHT / PIXEL_SCALE
-
-    -- Clamp to game region and bounce if outside
-    if self.x < 0 then
-        self.x = 0
-        self.vx = self.vx * -0.5
-    elseif self.x > game_width then
-        self.x = game_width
-        self.vx = self.vx * -0.5
+    -- Update weapon (but not during meteor mode - player cannot shoot)
+    if not self.meteor_mode then
+        local weapon = WeaponTypes[self.weapon]
+        if weapon and weapon.update then
+            weapon:update(self, dt)
+        end
     end
 
-    if self.y < 0 then
-        self.y = 0
-        self.vy = self.vy * -0.5
-    elseif self.y > game_height then
-        self.y = game_height
-        self.vy = self.vy * -0.5
+    -- Determine speed and acceleration (tripled speed, reduced accel during meteor mode)
+    local speed = STANDARD_SPEED
+    local accel_x = ACCEL_X
+    local accel_y = ACCEL_Y
+
+    if self.meteor_mode then
+        speed = STANDARD_SPEED * 3
+        accel_x = 5
+        accel_y = 5
+        self.r = 14  -- Increased radius during meteor mode
+    else
+        self.r = 5  -- Normal radius
     end
+
+    -- Freeze velocity and position during hit stun
+    if self.hitStun <= 0 then
+        -- Move velocity toward target velocity using acceleration
+        local target_vx = speed * self.input_x
+        local target_vy = speed * self.input_y
+
+        self.vx = toward(self.vx, target_vx, dt * accel_x)
+        self.vy = toward(self.vy, target_vy, dt * accel_y)
+
+        -- Update position
+        self.x = self.x + self.vx
+        self.y = self.y + self.vy
+
+        -- Game region dimensions (scaled by pixel scale)
+        local game_width = GAME_WIDTH / PIXEL_SCALE
+        local game_height = GAME_HEIGHT / PIXEL_SCALE
+
+        -- Clamp to game region and bounce if outside
+        if self.x < 0 then
+            self.x = 0
+            self.vx = self.vx * -0.5
+        elseif self.x > game_width then
+            self.x = game_width
+            self.vx = self.vx * -0.5
+        end
+
+        if self.y < 0 then
+            self.y = 0
+            self.vy = self.vy * -0.5
+        elseif self.y > game_height then
+            self.y = game_height
+            self.vy = self.vy * -0.5
+        end
+    end
+
+    -- Store firing state for next frame (for press detection)
+    self.firing_previous = self.firing
 end
 
 -- Handle input for all players
@@ -330,6 +440,47 @@ function Player:get_shield_attributes()
     -- Alpha fades from 1 (shieldAnim=0) to 0 (shieldAnim=1)
     local alpha = 1 - self.shieldAnim
     return radius, alpha
+end
+
+-- Determine shield color and visibility
+-- Returns: use_red (boolean), draw_shield (boolean), use_white_flash (boolean)
+function Player:get_shield_color()
+    -- During meteor mode with flickering at end
+    if self.meteor_mode and self.meteor_timer <= 1.5 then
+        -- Flicker visible/invisible at 7 Hz, but always red when visible
+        local time = love.timer.getTime()
+        local flicker_period = 1 / 7
+        local flicker_on = (math.floor(time / flicker_period) % 2) == 0
+        if not flicker_on then
+            return false, false, false  -- Invisible
+        else
+            return true, true, false  -- Red and visible
+        end
+    end
+
+    -- During meteor mode (not flickering yet)
+    if self.meteor_mode then
+        -- White flash for 0.1 seconds out of every 0.25 seconds
+        local time = love.timer.getTime()
+        local cycle_time = time % 0.25
+        local use_white_flash = cycle_time < 0.1
+        return true, true, use_white_flash  -- Pure red, with white flash
+    end
+
+    -- Shield dissipating after meteor mode
+    if self.shield_red_on_dissipate and not self.hasShield then
+        return true, true, false  -- Red while dissipating
+    end
+
+    -- Check if weapon has custom shield color logic
+    local weapon = WeaponTypes[self.weapon]
+    if weapon and weapon.isShieldRed then
+        local is_red = weapon:isShieldRed(self)
+        return is_red, true, false
+    end
+
+    -- Default: blue shield
+    return false, true, false
 end
 
 -- Render a single player
@@ -372,9 +523,9 @@ function Player:render()
     local offset_x = sprite_w / 2
     local offset_y = sprite_h / 2
 
-    -- Flicker during invincibility time (every 4 frames)
+    -- Flicker during invincibility time or meteor mode (every 4 frames)
     local should_draw = true
-    if self.iTime > 0 then
+    if self.iTime > 0 or self.meteor_mode then
         local frame_count = math.floor(love.timer.getTime() * 60)  -- Assuming 60 FPS
         if (frame_count % 4) < 2 then
             should_draw = false
@@ -387,31 +538,46 @@ function Player:render()
     end
 
     -- Draw shield if animation value indicates any visibility
-    if self.shieldAnim < 1 and shield_image then
-        local shield_radius, shield_alpha = self:get_shield_attributes()
+    if self.shieldAnim < 1 then
+        local use_red_shield, draw_shield, use_white_flash = self:get_shield_color()
 
-        -- Calculate scale based on radius (shield image size to fit the radius)
-        local shield_w = shield_image:getWidth()
-        local shield_h = shield_image:getHeight()
-        local scale = (shield_radius * 2) / shield_w
+        if draw_shield then
+            local current_shield_image = use_red_shield and shield_red_image or shield_image
 
-        -- Apply alpha for transparency
-        love.graphics.setColor(1, 1, 1, shield_alpha)
+            if current_shield_image then
+                local shield_radius, shield_alpha = self:get_shield_attributes()
 
-        -- Draw shield centered and scaled
-        love.graphics.draw(
-            shield_image,
-            self.x,
-            self.y,
-            0,
-            scale,
-            scale,
-            shield_w / 2,
-            shield_h / 2
-        )
+                -- Calculate scale based on radius (shield image size to fit the radius)
+                local shield_w = current_shield_image:getWidth()
+                local shield_h = current_shield_image:getHeight()
+                local scale = (shield_radius * 2) / shield_w
 
-        -- Reset color
-        love.graphics.setColor(1, 1, 1, 1)
+                -- Apply white flash shader if needed
+                if use_white_flash and flash_shader then
+                    love.graphics.setShader(flash_shader)
+                    flash_shader:send("flashing", true)
+                end
+
+                -- Apply alpha for transparency
+                love.graphics.setColor(1, 1, 1, shield_alpha)
+
+                -- Draw shield centered and scaled
+                love.graphics.draw(
+                    current_shield_image,
+                    self.x,
+                    self.y,
+                    0,
+                    scale,
+                    scale,
+                    shield_w / 2,
+                    shield_h / 2
+                )
+
+                -- Reset shader and color
+                love.graphics.setShader()
+                love.graphics.setColor(1, 1, 1, 1)
+            end
+        end
     end
 end
 

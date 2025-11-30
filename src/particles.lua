@@ -32,6 +32,35 @@ function particles.new(x, y, type, text)
     return particle
 end
 
+-- Create a meteor circle particle with random velocity and radius
+function particles.new_meteor_circle(x, y)
+    -- Random speed between 50-80 px/s
+    local speed = 50 + math.random() * 30
+
+    -- Random direction (angle in radians)
+    local angle = math.random() * 2 * math.pi
+
+    -- Calculate velocity components
+    local vx = speed * math.cos(angle)
+    local vy = speed * math.sin(angle)
+
+    -- Random initial radius between 8-16
+    local radius = 8 + math.random() * 8
+
+    local particle = {
+        x = x,
+        y = y,
+        type = "meteor_circle",
+        vx = vx,
+        vy = vy,
+        radius = radius,
+        alive = true
+    }
+
+    table.insert(particles.list, particle)
+    return particle
+end
+
 -- Remove dead particles from the list
 function particles.garbage()
     for i = #particles.list, 1, -1 do
@@ -162,6 +191,29 @@ function particle_render_respawn_text(p)
     end
 end
 
+-- Meteor circle particle update
+function particle_update_meteor_circle(p, dt)
+    -- Move according to velocity
+    p.x = p.x + p.vx * dt
+    p.y = p.y + p.vy * dt
+
+    -- Decrease radius at 16 px/s
+    p.radius = p.radius - 16 * dt
+
+    -- Die when radius reaches 0
+    if p.radius <= 0 then
+        p.alive = false
+    end
+end
+
+-- Meteor circle particle render
+function particle_render_meteor_circle(p)
+    -- Medium red color (0.7, 0, 0)
+    love.graphics.setColor(0.7, 0, 0)
+    love.graphics.circle("fill", p.x, p.y, p.radius)
+    love.graphics.setColor(1, 1, 1)
+end
+
 -- Global particle type definitions
 ParticleTypes = {
     explosion = {
@@ -175,6 +227,10 @@ ParticleTypes = {
     respawn_text = {
         update = particle_update_respawn_text,
         render = particle_render_respawn_text
+    },
+    meteor_circle = {
+        update = particle_update_meteor_circle,
+        render = particle_render_meteor_circle
     }
 }
 
