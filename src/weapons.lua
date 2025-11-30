@@ -105,7 +105,7 @@ function weapon_radiator:update(player, dt)
 
     -- Check if player is pressing fire button
     if player.firing and player.firing_p <= 0 then
-        -- Fire two bullets at opposite angles
+        -- Fire three bullets equally spaced (120 degrees apart)
         local speed = 4
 
         -- First bullet at current angle
@@ -114,11 +114,17 @@ function weapon_radiator:update(player, dt)
         local vy1 = -math.cos(angle1_rad) * speed
         bullets.new(player.x, player.y, vx1, vy1, "radiator", player)
 
-        -- Second bullet at opposite angle (180 degrees apart)
-        local angle2_rad = math.rad(player.radiator_angle + 180)
+        -- Second bullet at +120 degrees
+        local angle2_rad = math.rad(player.radiator_angle + 120)
         local vx2 = math.sin(angle2_rad) * speed
         local vy2 = -math.cos(angle2_rad) * speed
         bullets.new(player.x, player.y, vx2, vy2, "radiator", player)
+
+        -- Third bullet at +240 degrees
+        local angle3_rad = math.rad(player.radiator_angle + 240)
+        local vx3 = math.sin(angle3_rad) * speed
+        local vy3 = -math.cos(angle3_rad) * speed
+        bullets.new(player.x, player.y, vx3, vy3, "radiator", player)
 
         -- Play shoot sound
         local players_module = package.loaded["src/players"]
@@ -237,9 +243,15 @@ local weapon_meteor = {
 function weapon_meteor:init(player)
     player.firing_p = 0
     player.meteor_charge_time = 0  -- Time spent charging (firing while shielded)
+    player.meteor_weapon_time = 0  -- Time since weapon was equipped
+    -- Select random angle multiplier: 1 or -1
+    player.meteor_angle_multiplier = (math.random() < 0.5) and 1 or -1
 end
 
 function weapon_meteor:update(player, dt)
+    -- Increase weapon time
+    player.meteor_weapon_time = player.meteor_weapon_time + dt
+
     -- Decrease firing cooldown
     if player.firing_p > 0 then
         player.firing_p = player.firing_p - dt
@@ -278,8 +290,8 @@ function weapon_meteor:update(player, dt)
 
     -- Check if player is pressing fire button
     if player.firing and player.firing_p <= 0 then
-        -- Random angle from -50 to +50 degrees from north
-        local angle_degrees = (math.random() * 100 - 50)
+        -- Calculate angle using sin(t) oscillating between -50 and +50 degrees
+        local angle_degrees = math.sin(player.meteor_weapon_time) * 50 * player.meteor_angle_multiplier
         local angle_radians = math.rad(angle_degrees)
 
         -- Base speed
