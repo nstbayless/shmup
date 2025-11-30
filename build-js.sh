@@ -2,9 +2,9 @@
 set -e
 
 # Remove existing build directory
-if [ -d jsbuild ]
+if [ -d docs ]
 then
-  rm -r jsbuild/
+  rm -r docs/
 fi
 
 # Create .love file by zipping game assets
@@ -15,9 +15,9 @@ zip -9 -r shmup.love assets/ src/ main.lua conf.lua
 # -c: compatibility mode
 # -t: title of the game
 echo "Building JavaScript version..."
-love.js -c -t "Shmup" shmup.love jsbuild/
+love.js -c -t "Shmup" shmup.love docs/
 
 echo ""
-echo "Build complete! Output is in jsbuild/"
-echo "To test locally, run: cd jsbuild && python3 -m http.server 8000"
+echo "Build complete! Output is in docs/"
+echo "To test locally, run: cd docs && python3 -m http.server 8000"
 echo "Then open http://localhost:8000 in your browser"
