@@ -20,6 +20,7 @@ local frame_accumulate = 0.5
 local canvas
 local canvas_width, canvas_height
 local debug_draw = false
+local debug_mode = false  -- Only true if --debug is passed as CLI arg
 
 -- Initialize game state
 local function init()
@@ -40,6 +41,16 @@ local function init()
 end
 
 function love.load(args)
+    -- Check for --debug flag in command-line arguments
+    if args then
+        for _, arg in ipairs(args) do
+            if arg == "--debug" then
+                debug_mode = true
+                break
+            end
+        end
+    end
+
     love.window.setTitle("Shmup")
 
     -- Set up pixel-perfect scaling
@@ -369,6 +380,16 @@ function love.update(dt)
 end
 
 function love.keypressed(key)
+    -- Press 'm' to toggle music
+    if key == 'm' then
+        music.toggle()
+    end
+
+    -- Debug keys only available with --debug flag
+    if not debug_mode then
+        return
+    end
+
     -- TEMPORARY: Press 'x' to damage player for testing
     if key == 'x' then
         if players.list[1] then
@@ -384,11 +405,6 @@ function love.keypressed(key)
     -- Press 'd' to toggle debug drawing
     if key == 'd' then
         debug_draw = not debug_draw
-    end
-
-    -- Press 'm' to toggle music
-    if key == 'm' then
-        music.toggle()
     end
 
     -- Press 'w' to cycle weapons (debugging)
