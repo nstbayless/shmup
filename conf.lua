@@ -6,7 +6,7 @@ function love.conf(t)
     t.window.width = WINDOW_W
     t.window.height = WINDOW_H
     t.identity = "shmup"
-    t.version = "11.5"
+    t.version = "11.4"
     t.vsync = 0
     t.console = true
     t.window.title = "Shmup"
