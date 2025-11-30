@@ -9,8 +9,8 @@ local playing_intro = false
 
 -- Load music assets
 function music.load()
-    intro_music = love.audio.newSource("assets/BossIntro.wav", "static")
-    main_music = love.audio.newSource("assets/BossMain.wav", "static")
+    intro_music = love.audio.newSource("assets/BossIntro.ogg", "static")
+    main_music = love.audio.newSource("assets/BossMain.ogg", "static")
     main_music:setLooping(true)
 end
 

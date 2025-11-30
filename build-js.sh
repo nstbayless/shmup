@@ -12,10 +12,10 @@ echo "Creating shmup.love..."
 zip -9 -r shmup.love assets/ src/ main.lua conf.lua
 
 # Build JavaScript version using love.js
-# -c: compatibility mode
+# -c: compatibility mode (required for browsers without SharedArrayBuffer support)
 # -t: title of the game
 echo "Building JavaScript version..."
-love.js -c -t "Shmup" shmup.love docs/
+love.js -c -m 67108864 -t "Shmup" shmup.love docs/
 
 echo ""
 echo "Build complete! Output is in docs/"

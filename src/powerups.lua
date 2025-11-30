@@ -67,10 +67,23 @@ function powerups.update(dt)
         local currentWeapon = players.list[1] and players.list[1].weapon or nil
         local availableWeapons = {}
 
+        -- Get current wave number to determine if meteor can spawn
+        local waves = require "src/waves"
+        local waveNumber = waves.waveNumber
+
         for _, weapon in ipairs(WEAPONS) do
-            if weapon ~= currentWeapon then
-                table.insert(availableWeapons, weapon)
+            -- Exclude current weapon
+            if weapon == currentWeapon then
+                goto continue
             end
+
+            -- Exclude meteor if before wave 7
+            if weapon == "meteor" and waveNumber < 7 then
+                goto continue
+            end
+
+            table.insert(availableWeapons, weapon)
+            ::continue::
         end
 
         -- If all weapons are the current weapon (shouldn't happen), just use any weapon

@@ -1,6 +1,7 @@
 
 # Build artifacts
 *.love
+*.zip
 
 # LÖVE debug files
 *.lldebugdata
