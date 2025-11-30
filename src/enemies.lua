@@ -13,6 +13,7 @@ enemies.currentWave = 0
 
 -- Enemy spritesheet
 local enemy_quads, enemy_image
+local flash_shader
 
 -- Initialize enemies module state
 function enemies.init()
@@ -22,6 +23,7 @@ end
 -- Load enemy assets
 function enemies.load()
     enemy_quads, enemy_image = spritesheet.load("assets/enemies-16-16.png")
+    flash_shader = love.graphics.newShader("assets/flash.glsl")
 end
 
 -- Create a new enemy
@@ -35,11 +37,17 @@ function enemies.new(x, y, type, config)
         r = 5,  -- Collision radius
         alive = true,
         type = type or "standard",
-        fireTimer = math.random() + 1  -- Random time between 1-2 seconds (for standard enemy)
+        fireTimer = math.random() + 1,  -- Random time between 1-2 seconds (for standard enemy)
+        hp = 1,  -- Hitpoints (will be set based on type)
+        maxHp = 1,  -- Maximum hitpoints
+        damageFlashTimer = 0  -- Timer for white flash when damaged
     }
 
     -- Type-specific initialization
     if type == "positioner" then
+        -- Positioner HP: 4-6 random
+        enemy.hp = math.random(4, 6)
+        enemy.maxHp = enemy.hp
         -- Set destination coordinates
         enemy.dstX = math.random() * game_width
         enemy.dstY = math.random() * (game_height / 2)  -- Top half of game area
@@ -71,6 +79,10 @@ function enemies.new(x, y, type, config)
         enemy.exitVelocity = 0
         enemy.exitDirection = 0
     elseif type == "snakeHead" then
+        -- Snake head HP: 10-15 random + current wave number
+        enemy.hp = math.random(10, 15) + enemies.currentWave
+        enemy.maxHp = enemy.hp
+
         -- Snake head specific initialization
         enemy.currentDir = config and config.initialDir or 180  -- Direction in degrees
         enemy.targetDir = enemy.currentDir
@@ -80,6 +92,10 @@ function enemies.new(x, y, type, config)
         enemy.tail = nil  -- Reference to the last body piece
         enemy.bodyCount = 0  -- Count of living body pieces
     elseif type == "snakeBody" then
+        -- Snake body HP: 8 + current wave number
+        enemy.hp = 8 + enemies.currentWave
+        enemy.maxHp = enemy.hp
+
         -- Snake body specific initialization
         enemy.following = config and config.following or nil  -- Reference to piece in front
         enemy.head = config and config.head or nil  -- Reference to the head
@@ -140,6 +156,12 @@ end
 -- Update all enemies
 function enemies.update(dt)
     for _, enemy in ipairs(enemies.list) do
+        -- Update damage flash timer
+        if enemy.damageFlashTimer > 0 then
+            enemy.damageFlashTimer = enemy.damageFlashTimer - dt
+        end
+
+        -- Call type-specific update
         local enemy_type = EnemyTypes[enemy.type]
         if enemy_type and enemy_type.update then
             enemy_type.update(enemy, dt)
@@ -149,12 +171,26 @@ end
 
 -- Render all enemies
 function enemies.render()
+    -- Set the flash shader for all enemy rendering
+    if flash_shader then
+        love.graphics.setShader(flash_shader)
+    end
+
     for _, enemy in ipairs(enemies.list) do
+        -- Set the flashing uniform based on damage flash timer
+        if flash_shader then
+            flash_shader:send("flashing", enemy.damageFlashTimer > 0)
+        end
+
+        -- Call type-specific render
         local enemy_type = EnemyTypes[enemy.type]
         if enemy_type and enemy_type.render then
             enemy_type.render(enemy)
         end
     end
+
+    -- Reset shader
+    love.graphics.setShader()
 end
 
 -- Standard enemy update function

@@ -33,6 +33,8 @@ end
 function waves.start(config)
     waves.currentWave = waves.new(config)
     waves.waveNumber = waves.waveNumber + 1
+    -- Update enemies module's current wave tracker
+    enemies.currentWave = waves.waveNumber
 end
 
 -- Update the current wave

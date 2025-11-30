@@ -10,11 +10,13 @@ local powerup_quads, powerup_image
 
 -- Spawn timer
 powerups.spawn_timer = 0
+powerups.spawn_count = 0  -- Track how many powerups have spawned
 
 -- Initialize powerups module state
 function powerups.init()
     powerups.list = {}
-    powerups.spawn_timer = 20 + math.random() * 20
+    powerups.spawn_timer = 5  -- First powerup after 5 seconds
+    powerups.spawn_count = 0
 end
 
 -- Load powerup assets
@@ -46,15 +48,21 @@ end
 
 -- Update all powerups
 function powerups.update(dt)
-    -- Update spawn timer
-    powerups.spawn_timer = powerups.spawn_timer - dt
+    -- Check if player has more than 4 weapons on stack - if so, tick 30% slower
+    local players = require "src/players"
+    local adjusted_dt = dt
+    if players.list[1] and #players.list[1].weapon_stack > 4 then
+        adjusted_dt = dt * 0.7  -- Tick 30% slower
+    end
+
+    -- Update spawn timer with adjusted dt
+    powerups.spawn_timer = powerups.spawn_timer - adjusted_dt
     if powerups.spawn_timer <= 0 then
         -- Spawn a random powerup at top of screen (at least 32 pixels from edge)
         local game_width = GAME_WIDTH / PIXEL_SCALE
         local x = 32 + math.random() * (game_width - 64)
 
         -- Pick a random weapon type (excluding player's current weapon)
-        local players = require "src/players"
         local currentWeapon = players.list[1] and players.list[1].weapon or nil
         local availableWeapons = {}
 
@@ -73,8 +81,17 @@ function powerups.update(dt)
 
         powerups.new(x, -10, random_weapon)
 
-        -- Reset timer to random value between 20-40 seconds
-        powerups.spawn_timer = 20 + math.random() * 20
+        -- Calculate next spawn interval
+        -- First powerup: 5s, second: 10s later, then +5s each time
+        powerups.spawn_count = powerups.spawn_count + 1
+        if powerups.spawn_count == 1 then
+            -- After first powerup, wait 10 seconds for second
+            powerups.spawn_timer = 10
+        else
+            -- After second powerup, add 5 seconds each time
+            -- spawn_count=2 -> 15s, spawn_count=3 -> 20s, etc.
+            powerups.spawn_timer = 10 + (powerups.spawn_count - 1) * 5
+        end
     end
 
     -- Update each powerup

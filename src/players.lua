@@ -144,43 +144,37 @@ function Player:input(input_src)
     self.input_y = 0
     self.firing = false
 
-    -- Try keyboard first
-    local keyboard_input = false
-    if love.keyboard.isDown('left') or love.keyboard.isDown('right') or
-       love.keyboard.isDown('up') or love.keyboard.isDown('down') or
-       love.keyboard.isDown('x') then
-        keyboard_input = true
+    -- Add keyboard input
+    if love.keyboard.isDown('left') then
+        self.input_x = self.input_x - 1
+    end
+    if love.keyboard.isDown('right') then
+        self.input_x = self.input_x + 1
+    end
+    if love.keyboard.isDown('up') then
+        self.input_y = self.input_y - 1
+    end
+    if love.keyboard.isDown('down') then
+        self.input_y = self.input_y + 1
     end
 
-    if keyboard_input then
-        -- Poll arrow keys for input
-        if love.keyboard.isDown('left') then
-            self.input_x = self.input_x - 1
-        end
-        if love.keyboard.isDown('right') then
-            self.input_x = self.input_x + 1
-        end
-        if love.keyboard.isDown('up') then
-            self.input_y = self.input_y - 1
-        end
-        if love.keyboard.isDown('down') then
-            self.input_y = self.input_y + 1
-        end
+    -- Check keyboard fire button (space key)
+    if love.keyboard.isDown('space') then
+        self.firing = true
+    end
 
-        -- Check fire button (x key)
-        self.firing = love.keyboard.isDown('x')
-    else
-        -- Try gamepad input
-        local joysticks = love.joystick.getJoysticks()
-        if #joysticks > 0 then
-            local joystick = joysticks[1]  -- Use first joystick
+    -- Add gamepad input
+    local joysticks = love.joystick.getJoysticks()
+    if #joysticks > 0 then
+        local joystick = joysticks[1]  -- Use first joystick
 
-            -- Get joystick axes for movement
-            self.input_x = joystick:getAxis(1)  -- Left stick X axis
-            self.input_y = joystick:getAxis(2)  -- Left stick Y axis
+        -- Add joystick axes for movement
+        self.input_x = self.input_x + joystick:getAxis(1)  -- Left stick X axis
+        self.input_y = self.input_y + joystick:getAxis(2)  -- Left stick Y axis
 
-            -- Check fire button (A button, or button 1)
-            self.firing = joystick:isDown(1)
+        -- OR gamepad fire button (X button / West, button 3)
+        if joystick:isDown(3) then
+            self.firing = true
         end
     end
 end
