@@ -14,6 +14,7 @@ local bullets = require "src/bullets"
 local particles = require "src/particles"
 local powerups = require "src/powerups"
 local waves = require "src/waves"
+local music = require "src/music"
 
 local frame_accumulate = 0.5
 local canvas
@@ -33,6 +34,9 @@ local function init()
     -- Start first wave
     local firstWave = waves.getNextWave()
     waves.start(firstWave)
+
+    -- Initialize music (plays intro then loops main)
+    music.init()
 end
 
 function love.load(args)
@@ -52,6 +56,7 @@ function love.load(args)
     bullets.load()
     particles.load()
     powerups.load()
+    music.load()
 
     -- Initialize game state
     init()
@@ -178,6 +183,14 @@ function love.update(dt)
         end
     end
 
+    -- Check for player true death and stop music
+    if players.list[1] then
+        music.check_player_death(players.list[1])
+    end
+
+    -- Update music (transitions from intro to main loop)
+    music.update()
+
     players.input()
     players.update(dt)
     enemies.update(dt)
@@ -223,10 +236,22 @@ function love.update(dt)
                     local dy = enemy.y - bullet.y
                     local distance = math.sqrt(dx * dx + dy * dy)
                     if distance < enemy.r + bullet.r then
-                        enemy.alive = false
+                        -- Reduce enemy HP
+                        enemy.hp = enemy.hp - 1
+                        enemy.damageFlashTimer = 0.06  -- Flash white for 0.1 seconds
                         bullet.alive = false
-                        -- Create explosion particle
-                        particles.new(enemy.x, enemy.y, "explosion")
+
+                        -- Play hit sound
+                        enemies.playHitSound()
+
+                        -- Check if enemy is dead
+                        if enemy.hp <= 0 then
+                            enemy.alive = false
+                            -- Create explosion particle
+                            particles.new(enemy.x, enemy.y, "explosion")
+                            -- Play explosion sound
+                            enemies.playExplosionSound()
+                        end
                         break
                     end
                 end
@@ -244,9 +269,13 @@ function love.update(dt)
                     local distance = math.sqrt(dx * dx + dy * dy)
                     if distance < player.r + enemy.r then
                         player:damage()
+                        -- Enemy takes full damage and dies from collision
+                        enemy.hp = 0
                         enemy.alive = false
                         -- Create explosion particle
                         particles.new(enemy.x, enemy.y, "explosion")
+                        -- Play explosion sound
+                        enemies.playExplosionSound()
                         break
                     end
                 end
@@ -303,6 +332,11 @@ function love.keypressed(key)
     -- Press 'd' to toggle debug drawing
     if key == 'd' then
         debug_draw = not debug_draw
+    end
+
+    -- Press 'm' to toggle music
+    if key == 'm' then
+        music.toggle()
     end
 
     -- Press 'w' to cycle weapons (debugging)

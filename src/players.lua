@@ -8,6 +8,11 @@ local player_quads, player_image
 local shield_image
 local weapon_icon_quads, weapon_icon_image
 
+-- Sound effects
+local sfx_shield_restore
+local sfx_hit
+local sfx_death
+
 -- Player object metatable
 local Player = {}
 Player.__index = Player
@@ -80,6 +85,11 @@ function players.load()
     player_quads, player_image = spritesheet.load("assets/player-16-16.png")
     shield_image = love.graphics.newImage("assets/shield_Edit.png")
     weapon_icon_quads, weapon_icon_image = spritesheet.load("assets/contra-weapons-24-16.png")
+
+    -- Load sound effects
+    sfx_shield_restore = love.audio.newSource("assets/sfx/Player/shoot.wav", "static")
+    sfx_hit = love.audio.newSource("assets/sfx/Player/parry.wav", "static")
+    sfx_death = love.audio.newSource("assets/sfx/Player/bullet_hit.wav", "static")
 end
 
 -- Damage a player
@@ -94,11 +104,23 @@ function Player:damage()
         self.hasShield = false
         self.iTime = DAMAGE_ITIME
         self.shieldRestore = 0
+
+        -- Play hit sound
+        if sfx_hit then
+            sfx_hit:stop()
+            sfx_hit:play()
+        end
     else
         -- Die
         self.alive = false
         self.explodeTime = 0
         self.respawn_timer = 2  -- Respawn after 2 seconds
+
+        -- Play death sound
+        if sfx_death then
+            sfx_death:stop()
+            sfx_death:play()
+        end
     end
 end
 
@@ -203,6 +225,12 @@ function Player:update(dt)
         if self.shieldRestore >= 1 then
             self.shieldRestore = 0
             self.hasShield = true
+
+            -- Play shield restore sound
+            if sfx_shield_restore then
+                sfx_shield_restore:stop()
+                sfx_shield_restore:play()
+            end
         end
     end
 

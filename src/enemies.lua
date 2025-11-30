@@ -15,6 +15,11 @@ enemies.currentWave = 0
 local enemy_quads, enemy_image
 local flash_shader
 
+-- Sound effects
+local sfx_hit
+local sfx_explosion
+local sfx_shoot
+
 -- Initialize enemies module state
 function enemies.init()
     enemies.list = {}
@@ -24,6 +29,11 @@ end
 function enemies.load()
     enemy_quads, enemy_image = spritesheet.load("assets/enemies-16-16.png")
     flash_shader = love.graphics.newShader("assets/flash.glsl")
+
+    -- Load sound effects
+    sfx_hit = love.audio.newSource("assets/sfx/Enemy/hit.wav", "static")
+    sfx_explosion = love.audio.newSource("assets/sfx/Enemy/large.wav", "static")
+    sfx_shoot = love.audio.newSource("assets/sfx/Enemy/enemy_shoot.wav", "static")
 end
 
 -- Create a new enemy
@@ -219,6 +229,9 @@ function enemy_update_standard(e, dt)
 
                 -- Create bullet
                 bullets.new(e.x, e.y, vx, vy, "standard")
+
+                -- Play shoot sound
+                enemies.playShootSound()
             end
         end
     end
@@ -315,6 +328,9 @@ function enemy_update_positioner(e, dt)
                     local vx = (dx / distance) * bulletSpeed
                     local vy = (dy / distance) * bulletSpeed
                     bullets.new(e.x, e.y, vx, vy, "standard")
+
+                    -- Play shoot sound
+                    enemies.playShootSound()
                 end
             end
 
@@ -489,6 +505,8 @@ function enemy_update_snakeBody(e, dt)
             e.alive = false
             -- Create explosion particle
             particles.new(e.x, e.y, "explosion")
+            -- Play explosion sound
+            enemies.playExplosionSound()
             -- Decrement head's body count
             if e.head and e.head.alive then
                 e.head.bodyCount = e.head.bodyCount - 1
@@ -528,6 +546,30 @@ function enemy_render_snakeBody(e)
 
     -- Draw the sprite centered on x, y
     love.graphics.draw(enemy_image, enemy_quads[frame_index], e.x - offset_x, e.y - offset_y)
+end
+
+-- Play hit sound
+function enemies.playHitSound()
+    if sfx_hit then
+        sfx_hit:stop()
+        sfx_hit:play()
+    end
+end
+
+-- Play explosion sound
+function enemies.playExplosionSound()
+    if sfx_explosion then
+        sfx_explosion:stop()
+        sfx_explosion:play()
+    end
+end
+
+-- Play shoot sound
+function enemies.playShootSound()
+    if sfx_shoot then
+        sfx_shoot:stop()
+        sfx_shoot:play()
+    end
 end
 
 -- Global enemy type definitions
