@@ -8,6 +8,11 @@ bullets.list = {}
 -- Bullet spritesheet
 local bullet_quads, bullet_image
 
+-- Initialize bullets module state
+function bullets.init()
+    bullets.list = {}
+end
+
 -- Load bullet assets
 function bullets.load()
     bullet_quads, bullet_image = spritesheet.load("assets/bullets-16-16.png")
@@ -104,6 +109,21 @@ function bullet_render_player(b)
     love.graphics.draw(bullet_image, bullet_quads[1], b.x - offset_x, b.y - offset_y)
 end
 
+-- Radiater bullet render function
+function bullet_render_radiater(b)
+    if not bullet_quads or not bullet_image then
+        return
+    end
+
+    -- Get sprite dimensions to center it
+    local _, _, sprite_w, sprite_h = bullet_quads[3]:getViewport()
+    local offset_x = sprite_w / 2
+    local offset_y = sprite_h / 2
+
+    -- Draw the bullet sprite centered on x, y (sprite 3)
+    love.graphics.draw(bullet_image, bullet_quads[3], b.x - offset_x, b.y - offset_y)
+end
+
 -- Global bullet type definitions
 BulletTypes = {
     standard = {
@@ -113,6 +133,10 @@ BulletTypes = {
     player = {
         update = bullet_update_standard,
         render = bullet_render_player
+    },
+    radiater = {
+        update = bullet_update_standard,
+        render = bullet_render_radiater
     }
 }
 

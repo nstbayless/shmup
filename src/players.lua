@@ -3,14 +3,9 @@ local weapons = require "src/weapons"
 
 local players = {}
 
--- Array to store all player instances
-players.list = {}
-
--- Player spritesheet and shield image
+-- Module state
 local player_quads, player_image
 local shield_image
-
--- Weapon icon spritesheet (for UI)
 local weapon_icon_quads, weapon_icon_image
 
 -- Player object metatable
@@ -75,7 +70,12 @@ function Player:pop_weapon()
     return false
 end
 
--- Initialize players module (load spritesheet)
+-- Initialize players module state
+function players.init()
+    players.list = {}
+end
+
+-- Load players module assets (called once)
 function players.load()
     player_quads, player_image = spritesheet.load("assets/player-16-16.png")
     shield_image = love.graphics.newImage("assets/shield_Edit.png")
@@ -115,9 +115,11 @@ function Player:respawn()
         self.iTime = 1  -- 1 second of invincibility
         self.vx = 0
         self.vy = 0
-        -- Reset to starting position
-        self.x = 50
-        self.y = 50
+        -- Reset to starting position (halfway along width, 90% along height)
+        local game_width = GAME_WIDTH / PIXEL_SCALE
+        local game_height = GAME_HEIGHT / PIXEL_SCALE
+        self.x = game_width / 2
+        self.y = game_height * 0.9
     else
         -- No weapons left - true death
         self.true_death = true
@@ -128,18 +130,30 @@ end
 function players.ensure_players(n)
     local current_count = #players.list
     for i = current_count + 1, n do
-        -- Create new players at a default position
-        players.new(50, 50)
+        -- Create new players at a default position (halfway along width, 90% along height)
+        local game_width = GAME_WIDTH / PIXEL_SCALE
+        local game_height = GAME_HEIGHT / PIXEL_SCALE
+        players.new(game_width / 2, game_height * 0.9)
     end
 end
 
 -- Handle input for a single player
 function Player:input(input_src)
-    if input_src == 'keyboard' then
-        -- Poll arrow keys for input
-        self.input_x = 0
-        self.input_y = 0
+    -- Reset input
+    self.input_x = 0
+    self.input_y = 0
+    self.firing = false
 
+    -- Try keyboard first
+    local keyboard_input = false
+    if love.keyboard.isDown('left') or love.keyboard.isDown('right') or
+       love.keyboard.isDown('up') or love.keyboard.isDown('down') or
+       love.keyboard.isDown('x') then
+        keyboard_input = true
+    end
+
+    if keyboard_input then
+        -- Poll arrow keys for input
         if love.keyboard.isDown('left') then
             self.input_x = self.input_x - 1
         end
@@ -153,14 +167,33 @@ function Player:input(input_src)
             self.input_y = self.input_y + 1
         end
 
-        -- Check fire button
-        self.firing = love.keyboard.isDown('space')
+        -- Check fire button (x key)
+        self.firing = love.keyboard.isDown('x')
+    else
+        -- Try gamepad input
+        local joysticks = love.joystick.getJoysticks()
+        if #joysticks > 0 then
+            local joystick = joysticks[1]  -- Use first joystick
+
+            -- Get joystick axes for movement
+            self.input_x = joystick:getAxis(1)  -- Left stick X axis
+            self.input_y = joystick:getAxis(2)  -- Left stick Y axis
+
+            -- Check fire button (A button, or button 1)
+            self.firing = joystick:isDown(1)
+        end
     end
-    -- TODO: Handle gamepad input
 end
 
 -- Update player physics
 function Player:update(dt)
+    -- Normalize input vector to 1.0 if length exceeds 1
+    local input_length = math.sqrt(self.input_x * self.input_x + self.input_y * self.input_y)
+    if input_length > 1 then
+        self.input_x = self.input_x / input_length
+        self.input_y = self.input_y / input_length
+    end
+
     -- Update invincibility time
     if self.iTime > 0 then
         self.iTime = toward(self.iTime, 0, dt)
@@ -289,9 +322,9 @@ function Player:render()
     if self.input_x == 0 then
         frame_index = 1
     elseif self.input_x < 0 then
-        frame_index = 2
-    else
         frame_index = 3
+    else
+        frame_index = 2
     end
 
     -- Get sprite dimensions to center it
@@ -361,17 +394,31 @@ function players.draw_ui()
 
     for _, player in ipairs(players.list) do
         -- Draw current weapon at top (position 0)
-        local current_sprite_index = WeaponSprites[player.weapon] or 1
+        local current_weapon = WeaponTypes[player.weapon]
+        local current_sprite_index = current_weapon and current_weapon.sprite_index or 1
         local x = x_base
         local y = y_margin
 
-        -- Highlight current weapon with blue rectangle
-        love.graphics.setColor(0.5, 0.5, 1, 0.5)
-        love.graphics.rectangle("fill", x - 2, y - 2, 28, 20)
-        love.graphics.setColor(1, 1, 1)
+        -- Calculate flicker state for current weapon (6 Hz)
+        local time = love.timer.getTime()
+        local flicker_period = 1 / 6  -- 6 Hz
+        local flicker_on = (math.floor(time / flicker_period) % 2) == 0
 
-        -- Draw current weapon icon
-        love.graphics.draw(weapon_icon_image, weapon_icon_quads[current_sprite_index], x, y)
+        -- Flicker current weapon if player is dead
+        local should_draw_current = true
+        if not player.alive and not flicker_on then
+            should_draw_current = false
+        end
+
+        if should_draw_current then
+            -- Highlight current weapon with blue rectangle
+            love.graphics.setColor(0.5, 0.5, 1, 0.5)
+            love.graphics.rectangle("fill", x - 2, y - 2, 28, 20)
+            love.graphics.setColor(1, 1, 1)
+
+            -- Draw current weapon icon
+            love.graphics.draw(weapon_icon_image, weapon_icon_quads[current_sprite_index], x, y)
+        end
 
         -- Draw up to 4 weapons from the stack below current weapon
         local stack_size = #player.weapon_stack
@@ -379,7 +426,8 @@ function players.draw_ui()
 
         for i = 1, weapons_to_show do
             local weapon_name = player.weapon_stack[stack_size - i + 1]  -- Show from top of stack
-            local sprite_index = WeaponSprites[weapon_name] or 1
+            local weapon = WeaponTypes[weapon_name]
+            local sprite_index = weapon and weapon.sprite_index or 1
 
             local stack_x = x_base
             local stack_y = y_margin + i * 20

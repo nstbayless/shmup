@@ -3,10 +3,13 @@ local bullets = require "src/bullets"
 local weapons = {}
 
 -- List of available weapons
-WEAPONS = {"standard", "bishot"}
+WEAPONS = {"standard", "bishot", "radiater"}
 
 -- Standard weapon implementation
-local weapon_standard = {}
+local weapon_standard = {
+    name = "Standard",
+    sprite_index = 1
+}
 
 function weapon_standard:init(player)
     player.firing_p = 0
@@ -29,7 +32,10 @@ function weapon_standard:update(player, dt)
 end
 
 -- Bishot weapon implementation
-local weapon_bishot = {}
+local weapon_bishot = {
+    name = "Bishot",
+    sprite_index = 2
+}
 
 function weapon_bishot:init(player)
     player.firing_p = 0
@@ -68,16 +74,53 @@ function weapon_bishot:update(player, dt)
     end
 end
 
+-- Radiater weapon implementation
+local weapon_radiater = {
+    name = "Radiater",
+    sprite_index = 3
+}
+
+function weapon_radiater:init(player)
+    player.firing_p = 0
+    player.radiater_angle = 0  -- Current firing angle in degrees
+end
+
+function weapon_radiater:update(player, dt)
+    -- Decrease firing cooldown
+    if player.firing_p > 0 then
+        player.firing_p = player.firing_p - dt
+    end
+
+    -- Check if player is pressing fire button
+    if player.firing and player.firing_p <= 0 then
+        -- Fire two bullets at opposite angles
+        local speed = 4
+
+        -- First bullet at current angle
+        local angle1_rad = math.rad(player.radiater_angle)
+        local vx1 = math.sin(angle1_rad) * speed
+        local vy1 = -math.cos(angle1_rad) * speed
+        bullets.new(player.x, player.y, vx1, vy1, "radiater", player)
+
+        -- Second bullet at opposite angle (180 degrees apart)
+        local angle2_rad = math.rad(player.radiater_angle + 180)
+        local vx2 = math.sin(angle2_rad) * speed
+        local vy2 = -math.cos(angle2_rad) * speed
+        bullets.new(player.x, player.y, vx2, vy2, "radiater", player)
+
+        -- Advance angle by random 0-8 degrees clockwise
+        player.radiater_angle = (player.radiater_angle + math.random() * 8) % 360
+
+        -- 7 shots per second = 1/7 second between shots
+        player.firing_p = 1 / 7
+    end
+end
+
 -- Global weapon type definitions
 WeaponTypes = {
     standard = weapon_standard,
-    bishot = weapon_bishot
-}
-
--- Weapon sprite indices for powerups (from contra-weapons-24-16.png)
-WeaponSprites = {
-    standard = 1,
-    bishot = 2
+    bishot = weapon_bishot,
+    radiater = weapon_radiater
 }
 
 return weapons

@@ -13,11 +13,27 @@ local enemies = require "src/enemies"
 local bullets = require "src/bullets"
 local particles = require "src/particles"
 local powerups = require "src/powerups"
+local waves = require "src/waves"
 
 local frame_accumulate = 0.5
 local canvas
 local canvas_width, canvas_height
 local debug_draw = false
+
+-- Initialize game state
+local function init()
+    players.init()
+    enemies.init()
+    bullets.init()
+    particles.init()
+    powerups.init()
+    waves.init()
+    players.ensure_players(1)
+
+    -- Start first wave
+    local firstWave = waves.getNextWave()
+    waves.start(firstWave)
+end
 
 function love.load(args)
     love.window.setTitle("Shmup")
@@ -30,21 +46,15 @@ function love.load(args)
     canvas_height = math.floor(WINDOW_H / PIXEL_SCALE)
     canvas = love.graphics.newCanvas(canvas_width, canvas_height)
 
-    -- Initialize players
+    -- Load assets
     players.load()
-    players.ensure_players(1)
-
-    -- Initialize enemies
     enemies.load()
-
-    -- Initialize bullets
     bullets.load()
-
-    -- Initialize particles
     particles.load()
-
-    -- Initialize powerups
     powerups.load()
+
+    -- Initialize game state
+    init()
 end
 
 function love.draw()
@@ -67,6 +77,24 @@ function love.draw()
 
     -- Draw weapon stack UI (before scissor is enabled)
     players.draw_ui()
+
+    -- Draw wave timer at top right
+    if waves.currentWave then
+        local remainingTime = waves.currentWave.maxTime - waves.currentWave.currentTime
+        remainingTime = math.max(0, remainingTime)  -- Don't show negative
+        local timeText = string.format("%.2f", remainingTime)
+
+        -- Get current font to measure text width
+        local font = love.graphics.getFont()
+        local textWidth = font:getWidth(timeText)
+
+        -- Position at top right with small margin
+        local x = canvas_width - textWidth - 5
+        local y = 5
+
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.print(timeText, x, y)
+    end
 
     -- Set scissor rectangle for game area and draw black background
     love.graphics.setScissor(margin_l, margin_t, game_w, game_h)
@@ -116,6 +144,15 @@ function love.draw()
             love.graphics.line(player.x, player.y - 3, player.x, player.y + 3)
         end
 
+        -- Draw angle info for snake heads (white text)
+        love.graphics.setColor(1, 1, 1)
+        for _, enemy in ipairs(enemies.list) do
+            if enemy.type == "snakeHead" and enemy.alive then
+                local text = string.format("%.1f/%.1f", enemy.targetDir, enemy.currentDir)
+                love.graphics.print(text, enemy.x - 15, enemy.y - 10)
+            end
+        end
+
         -- Reset color
         love.graphics.setColor(1, 1, 1)
     end
@@ -136,7 +173,7 @@ function love.update(dt)
     if players.list[1] and players.list[1].true_death and players.list[1].explodeTime >= 2 then
         if players.list[1].firing then
             -- Reset game
-            love.load()
+            init()
             return
         end
     end
@@ -147,6 +184,17 @@ function love.update(dt)
     bullets.update(dt)
     particles.update(dt)
     powerups.update(dt)
+
+    -- Update waves and handle wave completion
+    local remainingTime = waves.update(dt)
+    if remainingTime then
+        -- Wave completed, reduce powerup spawn timer by 30% of remaining time
+        powerups.spawn_timer = powerups.spawn_timer - (remainingTime * 0.3)
+
+        -- Start next wave
+        local nextWave = waves.getNextWave()
+        waves.start(nextWave)
+    end
 
     -- Collision detection: enemy bullets vs players
     for _, bullet in ipairs(bullets.list) do
@@ -218,6 +266,14 @@ function love.update(dt)
                     if distance < 10 then
                         player:collect_weapon(powerup.weapon_type)
                         powerup.alive = false
+
+                        -- Create text particle showing weapon name
+                        local weapon = WeaponTypes[powerup.weapon_type]
+                        if weapon and weapon.name then
+                            local text = string.upper(weapon.name) .. "!"
+                            particles.new(player.x, player.y - 24, "text", text)
+                        end
+
                         break
                     end
                 end
@@ -241,7 +297,7 @@ function love.keypressed(key)
 
     -- TEMPORARY: Press 'e' to spawn an enemy for testing
     if key == 'e' then
-        enemies.new(100, 100, "standard")
+        enemies.spawnSnake()
     end
 
     -- Press 'd' to toggle debug drawing
@@ -267,13 +323,29 @@ function love.keypressed(key)
         end
     end
 
-    -- Press 'q' to get a random weapon (debugging)
+    -- Press 'q' to spawn a random weapon powerup (debugging)
     if key == 'q' then
-        if players.list[1] then
-            local player = players.list[1]
-            local random_weapon = WEAPONS[math.random(1, #WEAPONS)]
-            player:collect_weapon(random_weapon)
+        -- Spawn a random powerup at top of screen (at least 32 pixels from edge)
+        local game_width = GAME_WIDTH / PIXEL_SCALE
+        local x = 32 + math.random() * (game_width - 64)
+
+        -- Pick a random weapon type (excluding player's current weapon)
+        local currentWeapon = players.list[1] and players.list[1].weapon or nil
+        local availableWeapons = {}
+
+        for _, weapon in ipairs(WEAPONS) do
+            if weapon ~= currentWeapon then
+                table.insert(availableWeapons, weapon)
+            end
         end
+
+        -- If all weapons are the current weapon (shouldn't happen), just use any weapon
+        if #availableWeapons == 0 then
+            availableWeapons = WEAPONS
+        end
+
+        local random_weapon = availableWeapons[math.random(1, #availableWeapons)]
+        powerups.new(x, -10, random_weapon)
     end
 end
 

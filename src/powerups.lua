@@ -11,11 +11,15 @@ local powerup_quads, powerup_image
 -- Spawn timer
 powerups.spawn_timer = 0
 
+-- Initialize powerups module state
+function powerups.init()
+    powerups.list = {}
+    powerups.spawn_timer = 20 + math.random() * 20
+end
+
 -- Load powerup assets
 function powerups.load()
     powerup_quads, powerup_image = spritesheet.load("assets/contra-weapons-24-16.png")
-    -- Set initial spawn timer to random value
-    powerups.spawn_timer = 20 + math.random() * 20
 end
 
 -- Create a new powerup
@@ -45,12 +49,27 @@ function powerups.update(dt)
     -- Update spawn timer
     powerups.spawn_timer = powerups.spawn_timer - dt
     if powerups.spawn_timer <= 0 then
-        -- Spawn a random powerup at top of screen
+        -- Spawn a random powerup at top of screen (at least 32 pixels from edge)
         local game_width = GAME_WIDTH / PIXEL_SCALE
-        local x = math.random(10, game_width - 10)
+        local x = 32 + math.random() * (game_width - 64)
 
-        -- Pick a random weapon type
-        local random_weapon = WEAPONS[math.random(1, #WEAPONS)]
+        -- Pick a random weapon type (excluding player's current weapon)
+        local players = require "src/players"
+        local currentWeapon = players.list[1] and players.list[1].weapon or nil
+        local availableWeapons = {}
+
+        for _, weapon in ipairs(WEAPONS) do
+            if weapon ~= currentWeapon then
+                table.insert(availableWeapons, weapon)
+            end
+        end
+
+        -- If all weapons are the current weapon (shouldn't happen), just use any weapon
+        if #availableWeapons == 0 then
+            availableWeapons = WEAPONS
+        end
+
+        local random_weapon = availableWeapons[math.random(1, #availableWeapons)]
 
         powerups.new(x, -10, random_weapon)
 
@@ -80,7 +99,8 @@ function powerups.render()
 
     for _, powerup in ipairs(powerups.list) do
         -- Get sprite index from weapon definition
-        local sprite_index = WeaponSprites[powerup.weapon_type] or 1
+        local weapon = WeaponTypes[powerup.weapon_type]
+        local sprite_index = weapon and weapon.sprite_index or 1
 
         -- Get sprite dimensions to center it
         local _, _, sprite_w, sprite_h = powerup_quads[sprite_index]:getViewport()

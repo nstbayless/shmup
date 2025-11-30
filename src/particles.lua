@@ -8,19 +8,25 @@ particles.list = {}
 -- Particle spritesheets
 local explosion_quads, explosion_image
 
+-- Initialize particles module state
+function particles.init()
+    particles.list = {}
+end
+
 -- Load particle assets
 function particles.load()
     explosion_quads, explosion_image = spritesheet.load("assets/explosion-16-16.png")
 end
 
 -- Create a new particle
-function particles.new(x, y, type)
+function particles.new(x, y, type, text)
     local particle = {
         x = x or 0,
         y = y or 0,
         type = type or "explosion",
         animTime = 0,
-        alive = true
+        alive = true,
+        text = text or ""  -- For text particles
     }
     table.insert(particles.list, particle)
     return particle
@@ -90,11 +96,42 @@ function particle_render_explosion(p)
     love.graphics.draw(explosion_image, explosion_quads[frame_index], p.x - offset_x, p.y - offset_y)
 end
 
+-- Text particle update (moves upward for 1 second then disappears)
+function particle_update_text(p, dt)
+    p.animTime = p.animTime + dt
+
+    -- Move upward
+    p.y = p.y - dt * 20  -- Move up 20 pixels per second
+
+    -- Remove particle after 1 second
+    if p.animTime >= 1 then
+        p.alive = false
+    end
+end
+
+-- Text particle render (flickers at 6 Hz)
+function particle_render_text(p)
+    -- Calculate flicker state (6 Hz)
+    local flicker_period = 1 / 32
+    local flicker_on = (math.floor(p.animTime / flicker_period) % 2) == 0
+
+    if flicker_on then
+        love.graphics.setColor(1, 1, 1)
+        -- Get text width to center it
+        local text_width = love.graphics.getFont():getWidth(p.text)
+        love.graphics.print(p.text, p.x - text_width / 2, p.y)
+    end
+end
+
 -- Global particle type definitions
 ParticleTypes = {
     explosion = {
         update = particle_update_explosion,
         render = particle_render_explosion
+    },
+    text = {
+        update = particle_update_text,
+        render = particle_render_text
     }
 }
 
