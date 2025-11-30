@@ -72,18 +72,21 @@ function powerups.update(dt)
         local waveNumber = waves.waveNumber
 
         for _, weapon in ipairs(WEAPONS) do
+            local shouldInclude = true
+
             -- Exclude current weapon
             if weapon == currentWeapon then
-                goto continue
+                shouldInclude = false
             end
 
             -- Exclude meteor if before wave 7
             if weapon == "meteor" and waveNumber < 7 then
-                goto continue
+                shouldInclude = false
             end
 
-            table.insert(availableWeapons, weapon)
-            ::continue::
+            if shouldInclude then
+                table.insert(availableWeapons, weapon)
+            end
         end
 
         -- If all weapons are the current weapon (shouldn't happen), just use any weapon

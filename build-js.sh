@@ -15,7 +15,7 @@ zip -9 -r shmup.love assets/ src/ main.lua conf.lua
 # -c: compatibility mode (required for browsers without SharedArrayBuffer support)
 # -t: title of the game
 echo "Building JavaScript version..."
-love.js -c -m 67108864 -t "Shmup" shmup.love docs/
+love.js -c -m 33554432 -t "Shmup" shmup.love docs/
 
 echo ""
 echo "Build complete! Output is in docs/"
