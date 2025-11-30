@@ -1,5 +1,5 @@
+
 # Build artifacts
-jsbuild/
 *.love
 
 # LÖVE debug files
