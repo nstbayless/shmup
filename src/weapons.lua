@@ -132,9 +132,9 @@ function weapon_radiator:update(player, dt)
             players_module.playShootSound()
         end
 
-        -- Advance angle by random 1-9 degrees
+        -- Advance angle by random amount
         -- Direction depends on weapon stack size: even = counterclockwise, odd = clockwise
-        local angle_delta = math.random() * 8
+        local angle_delta = math.random() * 4
         if #player.weapon_stack % 2 == 0 then
             -- Even stack size: rotate counterclockwise (subtract)
             player.radiator_angle = (player.radiator_angle - angle_delta) % 360
@@ -143,8 +143,8 @@ function weapon_radiator:update(player, dt)
             player.radiator_angle = (player.radiator_angle + angle_delta) % 360
         end
 
-        -- 7 shots per second = 1/7 second between shots
-        player.firing_p = 1 / 7
+        -- 10.5 shots per second = 1/10.5 second between shots (50% faster)
+        player.firing_p = 1 / 10.5
     end
 end
 

@@ -11,12 +11,14 @@ local powerup_quads, powerup_image
 -- Spawn timer
 powerups.spawn_timer = 0
 powerups.spawn_count = 0  -- Track how many powerups have spawned
+powerups.meteor_has_spawned = false  -- Track if meteor has spawned yet
 
 -- Initialize powerups module state
 function powerups.init()
     powerups.list = {}
     powerups.spawn_timer = 5  -- First powerup after 5 seconds
     powerups.spawn_count = 0
+    powerups.meteor_has_spawned = false
 end
 
 -- Load powerup assets
@@ -63,38 +65,45 @@ function powerups.update(dt)
         local game_width = GAME_WIDTH / PIXEL_SCALE
         local x = 32 + math.random() * (game_width - 64)
 
-        -- Pick a random weapon type (excluding player's current weapon)
-        local currentWeapon = players.list[1] and players.list[1].weapon or nil
-        local availableWeapons = {}
-
         -- Get current wave number to determine if meteor can spawn
         local waves = require "src/waves"
         local waveNumber = waves.waveNumber
 
-        for _, weapon in ipairs(WEAPONS) do
-            local shouldInclude = true
+        -- Force meteor spawn on first powerup at wave 7+
+        local random_weapon
+        if waveNumber >= 7 and not powerups.meteor_has_spawned then
+            random_weapon = "meteor"
+            powerups.meteor_has_spawned = true
+        else
+            -- Pick a random weapon type (excluding player's current weapon)
+            local currentWeapon = players.list[1] and players.list[1].weapon or nil
+            local availableWeapons = {}
 
-            -- Exclude current weapon
-            if weapon == currentWeapon then
-                shouldInclude = false
+            for _, weapon in ipairs(WEAPONS) do
+                local shouldInclude = true
+
+                -- Exclude current weapon
+                if weapon == currentWeapon then
+                    shouldInclude = false
+                end
+
+                -- Exclude meteor if before wave 7
+                if weapon == "meteor" and waveNumber < 7 then
+                    shouldInclude = false
+                end
+
+                if shouldInclude then
+                    table.insert(availableWeapons, weapon)
+                end
             end
 
-            -- Exclude meteor if before wave 7
-            if weapon == "meteor" and waveNumber < 7 then
-                shouldInclude = false
+            -- If all weapons are the current weapon (shouldn't happen), just use any weapon
+            if #availableWeapons == 0 then
+                availableWeapons = WEAPONS
             end
 
-            if shouldInclude then
-                table.insert(availableWeapons, weapon)
-            end
+            random_weapon = availableWeapons[math.random(1, #availableWeapons)]
         end
-
-        -- If all weapons are the current weapon (shouldn't happen), just use any weapon
-        if #availableWeapons == 0 then
-            availableWeapons = WEAPONS
-        end
-
-        local random_weapon = availableWeapons[math.random(1, #availableWeapons)]
 
         powerups.new(x, -10, random_weapon)
 
